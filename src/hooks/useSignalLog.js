@@ -1,42 +1,35 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const STORAGE_KEY = 'fx_signal_log';
-
-const getSymbolYfTicker = (symbol) => {
-  if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') return 'ES=F';
-  if (symbol === 'NDX' || symbol === 'NASDAQ') return 'NQ=F';
-  if (symbol === 'XAUUSD' || symbol === 'GOLD') return 'GC=F';
-  return `${symbol}=X`;
-};
-
-const fetchCurrentPrice = async (symbol) => {
-  try {
-    const yfSymbol = getSymbolYfTicker(symbol);
-    const res = await fetch(`/api/finance/v8/finance/chart/${yfSymbol}?interval=1m&range=1d`);
-    const json = await res.json();
-    const closes = json.chart.result[0].indicators.quote[0].close.filter(x => x != null);
-    return closes[closes.length - 1];
-  } catch {
-    return null;
-  }
-};
+const STORAGE_KEY = 'fx_signal_log'; // Keep local storage as a fallback/cache
 
 export function useSignalLog() {
-  const [logs, setLogs] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-    } catch {
-      return [];
-    }
-  });
+  const [logs, setLogs] = useState([]);
 
-  const saveLogs = useCallback((updated) => {
-    setLogs(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/log');
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } else {
+        // Fallback to local storage if API fails
+        const local = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        setLogs(local);
+      }
+    } catch (error) {
+      const local = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      setLogs(local);
+    }
   }, []);
 
-  // Add or update a signal — deduplicates by symbol+timeframe+strategy+signal within a 10-minute window
-  const addSignal = useCallback((signal) => {
+  const addSignal = useCallback(async (signal) => {
+    // Note: The backend Cron job will identify and save signals in the background.
+    // This frontend addSignal is only for instant feedback if the user is browsing.
+    // However, to keep things consistent, we should push it to the server if needed.
+    // But since the Cron job runs every 5 mins, we can just let it handle it.
+    // To ensure the user sees it immediately, we update local state.
+    
     setLogs(prev => {
       const tenMinsAgo = Date.now() - 10 * 60 * 1000;
       const isDuplicate = prev.some(log =>
@@ -68,74 +61,35 @@ export function useSignalLog() {
         closedAt: null,
       };
 
-      const updated = [newLog, ...prev].slice(0, 200); // keep last 200
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      const updated = [newLog, ...prev].slice(0, 500);
+      
+      // Sync with server
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logs: updated })
+      }).catch(console.error);
+
       return updated;
     });
   }, []);
 
-  const clearLogs = useCallback(() => {
-    saveLogs([]);
-  }, [saveLogs]);
-
-  // Periodically check ACTIVE signals for TP/SL hits
-  useEffect(() => {
-    const checkOutcomes = async () => {
-      setLogs(prev => {
-        const activeSignals = prev.filter(l => l.status === 'ACTIVE');
-        if (activeSignals.length === 0) return prev;
-        return prev; // return unchanged, async update happens below
-      });
-
-      const currentLogs = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      const activeSignals = currentLogs.filter(l => l.status === 'ACTIVE');
-      if (activeSignals.length === 0) return;
-
-      // Group by symbol to minimize fetches
-      const symbols = [...new Set(activeSignals.map(l => l.symbol))];
-      const prices = {};
-      await Promise.all(symbols.map(async sym => {
-        prices[sym] = await fetchCurrentPrice(sym);
-      }));
-
-      let changed = false;
-      const updated = currentLogs.map(log => {
-        if (log.status !== 'ACTIVE') return log;
-        const price = prices[log.symbol];
-        if (price == null) return log;
-
-        if (log.signal === 'BUY') {
-          if (price >= log.tp) {
-            changed = true;
-            return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString() };
-          }
-          if (price <= log.sl) {
-            changed = true;
-            return { ...log, status: 'FAILED', closedAt: new Date().toISOString() };
-          }
-        } else if (log.signal === 'SELL') {
-          if (price <= log.tp) {
-            changed = true;
-            return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString() };
-          }
-          if (price >= log.sl) {
-            changed = true;
-            return { ...log, status: 'FAILED', closedAt: new Date().toISOString() };
-          }
-        }
-        return log;
-      });
-
-      if (changed) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-        setLogs(updated);
-      }
-    };
-
-    checkOutcomes();
-    const interval = setInterval(checkOutcomes, 60000); // check every minute
-    return () => clearInterval(interval);
+  const clearLogs = useCallback(async () => {
+    try {
+      await fetch('/api/log', { method: 'DELETE' });
+      setLogs([]);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+    } catch (error) {
+      console.error('Failed to clear logs on server');
+    }
   }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 30000); // Sync every 30 seconds
+    return () => clearInterval(interval);
+  }, [fetchLogs]);
 
   return { logs, addSignal, clearLogs };
 }

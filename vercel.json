@@ -5,8 +5,18 @@
       "destination": "/api/finance"
     },
     {
+      "source": "/api/log",
+      "destination": "/api/log"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
