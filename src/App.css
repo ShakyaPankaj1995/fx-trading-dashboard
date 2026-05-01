@@ -722,3 +722,143 @@
 .log-status-active  { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
 .log-status-success { background: rgba(14,203,129,0.15); color: var(--buy-green); }
 .log-status-failed  { background: rgba(246,70,93,0.15);  color: var(--sell-red); }
+
+/* Economic Events */
+.events-card {
+  background: var(--bg-secondary);
+}
+
+.events-icon {
+  color: var(--accent-blue);
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+}
+
+.event-item {
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  padding: 16px;
+  border-left: 4px solid transparent;
+  transition: transform 0.2s;
+}
+
+.event-item:hover {
+  transform: translateX(4px);
+}
+
+.event-item.up { border-left-color: var(--buy-green); }
+.event-item.down { border-left-color: var(--sell-red); }
+
+.event-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.event-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-country {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.event-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.event-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+}
+
+.event-date {
+  color: var(--text-secondary);
+}
+
+.event-impact.high {
+  color: #ff4d4d;
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+}
+
+.event-prediction {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.prediction-box, .forecast-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.prediction-label {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.prediction-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.prediction-badge.up { background: rgba(14, 203, 129, 0.2); color: var(--buy-green); }
+.prediction-badge.down { background: rgba(246, 70, 93, 0.2); color: var(--sell-red); }
+.prediction-badge.neutral { background: rgba(255, 255, 255, 0.1); color: var(--text-secondary); }
+
+.forecast-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.event-reason {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 6px;
+  font-style: italic;
+}
+
+.empty-events {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+

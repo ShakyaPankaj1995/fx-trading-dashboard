@@ -3,6 +3,7 @@ import NavBar from './components/NavBar';
 import ChartGrid from './components/ChartGrid';
 import StrategyCard from './components/StrategyCard';
 import CRTStrategyCard from './components/CRTStrategyCard';
+import EconomicEvents from './components/EconomicEvents';
 import SignalLogModal from './components/SignalLogModal';
 import { SignalLogProvider } from './context/SignalLogContext';
 import './App.css';
@@ -30,6 +31,7 @@ function AppInner() {
 
           <StrategyCard symbol={symbol} />
           <CRTStrategyCard symbol={symbol} />
+          <EconomicEvents symbol={symbol} />
           <ChartGrid symbol={symbol} />
         </div>
       </main>
