@@ -88,23 +88,32 @@ export default async function handler(req, res) {
       for (const sym of symbols) {
         try {
           const currentData = await fetchYF(tickerMap[sym], '1m', '1d');
-          const closes = currentData.indicators.quote[0].close.filter(x => x != null);
-          const currentPrice = closes[closes.length - 1];
+          const quotes = currentData.indicators.quote[0];
+          const timestamps = currentData.timestamp;
 
-          if (currentPrice) {
-            logs = logs.map(log => {
-              if (log.symbol !== sym || log.status !== 'ACTIVE') return log;
+          logs = logs.map(log => {
+            if (log.symbol !== sym || log.status !== 'ACTIVE') return log;
+            
+            const logTime = new Date(log.timestamp).getTime() / 1000;
+            
+            // Find all candles after signal was logged
+            for (let i = 0; i < timestamps.length; i++) {
+              if (timestamps[i] < logTime) continue;
               
+              const high = quotes.high[i];
+              const low = quotes.low[i];
+              if (high == null || low == null) continue;
+
               if (log.signal === 'BUY') {
-                if (currentPrice >= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString() };
-                if (currentPrice <= log.sl) return { ...log, status: 'FAILED', closedAt: new Date().toISOString() };
+                if (high >= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date(timestamps[i] * 1000).toISOString() };
+                if (low <= log.sl) return { ...log, status: 'FAILED', closedAt: new Date(timestamps[i] * 1000).toISOString() };
               } else {
-                if (currentPrice <= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString() };
-                if (currentPrice >= log.sl) return { ...log, status: 'FAILED', closedAt: new Date().toISOString() };
+                if (low <= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date(timestamps[i] * 1000).toISOString() };
+                if (high >= log.sl) return { ...log, status: 'FAILED', closedAt: new Date(timestamps[i] * 1000).toISOString() };
               }
-              return log;
-            });
-          }
+            }
+            return log;
+          });
         } catch (e) {
           console.error(`Error updating outcome for ${sym}:`, e.message);
         }

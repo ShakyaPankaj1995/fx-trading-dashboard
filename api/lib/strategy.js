@@ -8,34 +8,59 @@ export function analyzeData(data, intervalStr) {
   let closesRaw = data.indicators.quote[0].close;
   let opensRaw = data.indicators.quote[0].open;
 
-  let highs = [];
-  let lows = [];
-  let closes = [];
-  let opens = [];
-
+  let timestamps = [];
   for (let i = 0; i < closesRaw.length; i++) {
     if (highsRaw[i] != null && lowsRaw[i] != null && closesRaw[i] != null && opensRaw[i] != null) {
       highs.push(highsRaw[i]);
       lows.push(lowsRaw[i]);
       closes.push(closesRaw[i]);
       opens.push(opensRaw[i]);
+      timestamps.push(data.timestamp[i]);
     }
   }
 
-  // Aggregate 1h data into 4h data if needed
+  // Aggregate 1h data into 4h data if needed (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 boundaries)
   if (intervalStr === '240') {
     const aggHighs = [];
     const aggLows = [];
     const aggCloses = [];
     const aggOpens = [];
-    for (let i = 0; i < closes.length; i += 4) {
-      if (i + 3 < closes.length) {
-        aggOpens.push(opens[i]);
-        aggHighs.push(Math.max(highs[i], highs[i+1], highs[i+2], highs[i+3]));
-        aggLows.push(Math.min(lows[i], lows[i+1], lows[i+2], lows[i+3]));
-        aggCloses.push(closes[i+3]);
+    
+    let currentCandle = null;
+
+    for (let i = 0; i < closes.length; i++) {
+      const date = new Date(timestamps[i] * 1000);
+      const hour = date.getUTCHours();
+      const candleStartHour = Math.floor(hour / 4) * 4;
+
+      if (!currentCandle || currentCandle.startHour !== candleStartHour) {
+        if (currentCandle) {
+          aggOpens.push(currentCandle.open);
+          aggHighs.push(currentCandle.high);
+          aggLows.push(currentCandle.low);
+          aggCloses.push(currentCandle.close);
+        }
+        currentCandle = {
+          startHour: candleStartHour,
+          open: opens[i],
+          high: highs[i],
+          low: lows[i],
+          close: closes[i]
+        };
+      } else {
+        currentCandle.high = Math.max(currentCandle.high, highs[i]);
+        currentCandle.low = Math.min(currentCandle.low, lows[i]);
+        currentCandle.close = closes[i];
       }
     }
+    // Push the last one
+    if (currentCandle) {
+      aggOpens.push(currentCandle.open);
+      aggHighs.push(currentCandle.high);
+      aggLows.push(currentCandle.low);
+      aggCloses.push(currentCandle.close);
+    }
+
     highs = aggHighs;
     lows = aggLows;
     closes = aggCloses;
@@ -212,17 +237,14 @@ export function analyzeCRTData(data, intervalStr) {
   let closesRaw = data.indicators.quote[0].close;
   let opensRaw = data.indicators.quote[0].open;
 
-  let highs = [];
-  let lows = [];
-  let closes = [];
-  let opens = [];
-
+  let timestamps = [];
   for (let i = 0; i < closesRaw.length; i++) {
     if (highsRaw[i] != null && lowsRaw[i] != null && closesRaw[i] != null && opensRaw[i] != null) {
       highs.push(highsRaw[i]);
       lows.push(lowsRaw[i]);
       closes.push(closesRaw[i]);
       opens.push(opensRaw[i]);
+      timestamps.push(data.timestamp[i]);
     }
   }
 
@@ -231,14 +253,41 @@ export function analyzeCRTData(data, intervalStr) {
     const aggLows = [];
     const aggCloses = [];
     const aggOpens = [];
-    for (let i = 0; i < closes.length; i += 4) {
-      if (i + 3 < closes.length) {
-        aggOpens.push(opens[i]);
-        aggHighs.push(Math.max(highs[i], highs[i+1], highs[i+2], highs[i+3]));
-        aggLows.push(Math.min(lows[i], lows[i+1], lows[i+2], lows[i+3]));
-        aggCloses.push(closes[i+3]);
+    
+    let currentCandle = null;
+
+    for (let i = 0; i < closes.length; i++) {
+      const date = new Date(timestamps[i] * 1000);
+      const hour = date.getUTCHours();
+      const candleStartHour = Math.floor(hour / 4) * 4;
+
+      if (!currentCandle || currentCandle.startHour !== candleStartHour) {
+        if (currentCandle) {
+          aggOpens.push(currentCandle.open);
+          aggHighs.push(currentCandle.high);
+          aggLows.push(currentCandle.low);
+          aggCloses.push(currentCandle.close);
+        }
+        currentCandle = {
+          startHour: candleStartHour,
+          open: opens[i],
+          high: highs[i],
+          low: lows[i],
+          close: closes[i]
+        };
+      } else {
+        currentCandle.high = Math.max(currentCandle.high, highs[i]);
+        currentCandle.low = Math.min(currentCandle.low, lows[i]);
+        currentCandle.close = closes[i];
       }
     }
+    if (currentCandle) {
+      aggOpens.push(currentCandle.open);
+      aggHighs.push(currentCandle.high);
+      aggLows.push(currentCandle.low);
+      aggCloses.push(currentCandle.close);
+    }
+
     highs = aggHighs;
     lows = aggLows;
     closes = aggCloses;
