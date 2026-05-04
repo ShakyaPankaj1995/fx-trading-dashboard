@@ -82,8 +82,8 @@ export function analyzeData(data, intervalStr) {
       if (highs[i] <= highs[i - j] || highs[i] <= highs[i + j]) isPh = false;
       if (lows[i] >= lows[i - j] || lows[i] >= lows[i + j]) isPl = false;
     }
-    if (isPh && highs[i] != null) ph.push({ index: i, value: highs[i] });
-    if (isPl && lows[i] != null) pl.push({ index: i, value: lows[i] });
+    if (isPh && highs[i] != null) ph.push({ index: i, value: highs[i], time: timestamps[i] });
+    if (isPl && lows[i] != null) pl.push({ index: i, value: lows[i], time: timestamps[i] });
   }
 
   if (ph.length < 2 || pl.length < 2) return { signal: 'NEUTRAL', reason: 'Building market structure...' };
@@ -137,6 +137,7 @@ export function analyzeData(data, intervalStr) {
       if (reward >= risk * minRiskReward && risk > 0) {
         return {
           signal: 'BUY', entry: currentClose, sl, tp,
+          setupTime: lastPl.time,
           reason: 'Trendline Bounce',
           reasoning: [
             `Price bounced off uptrend support near swing low (${lastPl.value.toFixed(5)})`,
@@ -164,6 +165,7 @@ export function analyzeData(data, intervalStr) {
       if (reward >= risk * minRiskReward && risk > 0) {
         return {
           signal: 'SELL', entry: currentClose, sl, tp,
+          setupTime: lastPh.time,
           reason: 'Trendline Bounce',
           reasoning: [
             `Price rejected downtrend resistance near swing high (${lastPh.value.toFixed(5)})`,
@@ -190,6 +192,7 @@ export function analyzeData(data, intervalStr) {
     if (reward >= risk * minRiskReward && risk > 0) {
       return {
         signal: 'BUY', entry: currentClose, sl, tp,
+        setupTime: lastPl.time,
         reason: 'Active Uptrend',
         reasoning: [
           `Sustained uptrend: HH at ${lastPh.value.toFixed(5)}, HL at ${lastPl.value.toFixed(5)}`,
@@ -212,6 +215,7 @@ export function analyzeData(data, intervalStr) {
     if (reward >= risk * minRiskReward && risk > 0) {
       return {
         signal: 'SELL', entry: currentClose, sl, tp,
+        setupTime: lastPh.time,
         reason: 'Active Downtrend',
         reasoning: [
           `Sustained downtrend: LH at ${lastPh.value.toFixed(5)}, LL at ${lastPl.value.toFixed(5)}`,
@@ -333,6 +337,7 @@ export function analyzeCRTData(data, intervalStr) {
         if (reward >= risk * 1.5 && entry < tp) {
            return {
              signal: 'BUY', entry, sl, tp,
+             setupTime: timestamps[i - 2], // C1 time
              reason: 'CRT Setup (AMD)',
              reasoning: [
                `Reference candle (C1) range: ${c1Low.toFixed(5)} — ${c1High.toFixed(5)}`,
@@ -369,6 +374,7 @@ export function analyzeCRTData(data, intervalStr) {
         if (reward >= risk * 1.5 && entry > tp) {
            return {
              signal: 'SELL', entry, sl, tp,
+             setupTime: timestamps[i - 2], // C1 time
              reason: 'CRT Setup (AMD)',
              reasoning: [
                `Reference candle (C1) range: ${c1Low.toFixed(5)} — ${c1High.toFixed(5)}`,

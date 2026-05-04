@@ -89,36 +89,80 @@ const TradingViewWidget = ({ symbol, interval }) => {
         const trendSignal = analyzeData(data, interval);
         const crtSignal = analyzeCRTData(data, interval);
 
-        const drawSetup = (signal) => {
-          if (signal.signal === 'BUY' || signal.signal === 'SELL') {
-            candleSeries.createPriceLine({
-              price: signal.entry,
-              color: '#3b82f6',
-              lineWidth: 2,
-              title: 'ENTRY',
-              axisLabelVisible: true,
-            });
-            candleSeries.createPriceLine({
-              price: signal.tp,
-              color: '#0ecb81',
-              lineWidth: 2,
-              lineStyle: 2,
-              title: 'TARGET',
-              axisLabelVisible: true,
-            });
-            candleSeries.createPriceLine({
-              price: signal.sl,
-              color: '#f6465d',
-              lineWidth: 2,
-              lineStyle: 2,
-              title: 'STOP',
-              axisLabelVisible: true,
-            });
-          }
-        };
+        // Draw whichever signal is active (prioritize CRT)
+        const activeSignal = (crtSignal.signal === 'BUY' || crtSignal.signal === 'SELL') ? crtSignal : 
+                             (trendSignal.signal === 'BUY' || trendSignal.signal === 'SELL') ? trendSignal : null;
 
-        if (crtSignal.signal === 'BUY' || crtSignal.signal === 'SELL') drawSetup(crtSignal);
-        else if (trendSignal.signal === 'BUY' || trendSignal.signal === 'SELL') drawSetup(trendSignal);
+        if (activeSignal) {
+          // 1. Draw Price Lines (as before)
+          candleSeries.createPriceLine({
+            price: activeSignal.entry,
+            color: '#3b82f6',
+            lineWidth: 2,
+            title: 'ENTRY',
+            axisLabelVisible: true,
+          });
+          candleSeries.createPriceLine({
+            price: activeSignal.tp,
+            color: '#0ecb81',
+            lineWidth: 2,
+            lineStyle: 2,
+            title: 'TARGET',
+            axisLabelVisible: true,
+          });
+          candleSeries.createPriceLine({
+            price: activeSignal.sl,
+            color: '#f6465d',
+            lineWidth: 2,
+            lineStyle: 2,
+            title: 'STOP',
+            axisLabelVisible: true,
+          });
+
+          // 2. Draw Long/Short Boxes (Risk/Reward areas)
+          const setupStartTime = activeSignal.setupTime;
+          const lastTime = formattedData[formattedData.length - 1].time;
+          
+          // Reward Area (Green/Blue)
+          const rewardSeries = chart.addBaselineSeries({
+            baseValue: { type: 'price', price: activeSignal.entry },
+            topFillColor1: activeSignal.signal === 'BUY' ? 'rgba(14, 203, 129, 0.25)' : 'rgba(246, 70, 93, 0.25)',
+            topFillColor2: activeSignal.signal === 'BUY' ? 'rgba(14, 203, 129, 0.05)' : 'rgba(246, 70, 93, 0.05)',
+            topLineColor: 'transparent',
+            bottomFillColor1: 'transparent',
+            bottomFillColor2: 'transparent',
+            bottomLineColor: 'transparent',
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+
+          // Risk Area (Red)
+          const riskSeries = chart.addBaselineSeries({
+            baseValue: { type: 'price', price: activeSignal.entry },
+            topFillColor1: 'transparent',
+            topFillColor2: 'transparent',
+            topLineColor: 'transparent',
+            bottomFillColor1: activeSignal.signal === 'BUY' ? 'rgba(246, 70, 93, 0.25)' : 'rgba(14, 203, 129, 0.25)',
+            bottomFillColor2: activeSignal.signal === 'BUY' ? 'rgba(246, 70, 93, 0.05)' : 'rgba(14, 203, 129, 0.05)',
+            bottomLineColor: 'transparent',
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+
+          // Create the box points
+          const boxData = formattedData
+            .filter(d => d.time >= setupStartTime)
+            .map(d => ({ time: d.time, value: activeSignal.signal === 'BUY' ? activeSignal.tp : activeSignal.sl }));
+          
+          const riskData = formattedData
+            .filter(d => d.time >= setupStartTime)
+            .map(d => ({ time: d.time, value: activeSignal.signal === 'BUY' ? activeSignal.sl : activeSignal.tp }));
+
+          rewardSeries.setData(boxData);
+          riskSeries.setData(riskData);
+        }
 
         chart.timeScale().fitContent();
         setLoading(false);
