@@ -9,13 +9,13 @@ export function analyzeData(data, intervalStr) {
   let opensRaw = data.indicators.quote[0].open;
 
   let timestamps = [];
-  let highs = [], lows = [], closes = [], opens = [];
+  let pricesHigh = [], pricesLow = [], pricesClose = [], pricesOpen = [];
   for (let i = 0; i < closesRaw.length; i++) {
     if (highsRaw[i] != null && lowsRaw[i] != null && closesRaw[i] != null && opensRaw[i] != null) {
-      highs.push(highsRaw[i]);
-      lows.push(lowsRaw[i]);
-      closes.push(closesRaw[i]);
-      opens.push(opensRaw[i]);
+      pricesHigh.push(highsRaw[i]);
+      pricesLow.push(lowsRaw[i]);
+      pricesClose.push(closesRaw[i]);
+      pricesOpen.push(opensRaw[i]);
       timestamps.push(data.timestamp[i]);
     }
   }
@@ -29,7 +29,7 @@ export function analyzeData(data, intervalStr) {
     
     let currentCandle = null;
 
-    for (let i = 0; i < closes.length; i++) {
+    for (let i = 0; i < pricesClose.length; i++) {
       const date = new Date(timestamps[i] * 1000);
       const hour = date.getUTCHours();
       const candleStartHour = Math.floor(hour / 4) * 4;
@@ -43,15 +43,15 @@ export function analyzeData(data, intervalStr) {
         }
         currentCandle = {
           startHour: candleStartHour,
-          open: opens[i],
-          high: highs[i],
-          low: lows[i],
-          close: closes[i]
+          open: pricesOpen[i],
+          high: pricesHigh[i],
+          low: pricesLow[i],
+          close: pricesClose[i]
         };
       } else {
-        currentCandle.high = Math.max(currentCandle.high, highs[i]);
-        currentCandle.low = Math.min(currentCandle.low, lows[i]);
-        currentCandle.close = closes[i];
+        currentCandle.high = Math.max(currentCandle.high, pricesHigh[i]);
+        currentCandle.low = Math.min(currentCandle.low, pricesLow[i]);
+        currentCandle.close = pricesClose[i];
       }
     }
     // Push the last one
@@ -62,13 +62,13 @@ export function analyzeData(data, intervalStr) {
       aggCloses.push(currentCandle.close);
     }
 
-    highs = aggHighs;
-    lows = aggLows;
-    closes = aggCloses;
-    opens = aggOpens;
+    pricesHigh = aggHighs;
+    pricesLow = aggLows;
+    pricesClose = aggCloses;
+    pricesOpen = aggOpens;
   }
 
-  if (highs.length < 20) {
+  if (pricesHigh.length < 20) {
      return { signal: 'WAIT', reason: 'Insufficient timeframe data' };
   }
 
@@ -76,15 +76,15 @@ export function analyzeData(data, intervalStr) {
   const ph = []; 
   const pl = []; 
 
-  for (let i = pivotLength; i < highs.length - pivotLength; i++) {
+  for (let i = pivotLength; i < pricesHigh.length - pivotLength; i++) {
     let isPh = true;
     let isPl = true;
     for (let j = 1; j <= pivotLength; j++) {
-      if (highs[i] <= highs[i - j] || highs[i] <= highs[i + j]) isPh = false;
-      if (lows[i] >= lows[i - j] || lows[i] >= lows[i + j]) isPl = false;
+      if (pricesHigh[i] <= pricesHigh[i - j] || pricesHigh[i] <= pricesHigh[i + j]) isPh = false;
+      if (pricesLow[i] >= pricesLow[i - j] || pricesLow[i] >= pricesLow[i + j]) isPl = false;
     }
-    if (isPh && highs[i] != null) ph.push({ index: i, value: highs[i], time: timestamps[i] });
-    if (isPl && lows[i] != null) pl.push({ index: i, value: lows[i], time: timestamps[i] });
+    if (isPh && pricesHigh[i] != null) ph.push({ index: i, value: pricesHigh[i], time: timestamps[i] });
+    if (isPl && pricesLow[i] != null) pl.push({ index: i, value: pricesLow[i], time: timestamps[i] });
   }
 
   if (ph.length < 2 || pl.length < 2) return { signal: 'NEUTRAL', reason: 'Building market structure...' };
@@ -97,18 +97,18 @@ export function analyzeData(data, intervalStr) {
   const uptrend = lastPh.value > prevPh.value && lastPl.value > prevPl.value;
   const downtrend = lastPh.value < prevPh.value && lastPl.value < prevPl.value;
 
-  const currentClose = closes[closes.length - 1];
-  const currentOpen = opens[opens.length - 1];
-  const currentHigh = highs[highs.length - 1];
-  const currentLow = lows[lows.length - 1];
+  const currentClose = pricesClose[pricesClose.length - 1];
+  const currentOpen = pricesOpen[pricesOpen.length - 1];
+  const currentHigh = pricesHigh[pricesHigh.length - 1];
+  const currentLow = pricesLow[pricesLow.length - 1];
 
   let trSum = 0;
   let count = 0;
-  for (let i = closes.length - 15; i < closes.length - 1; i++) {
-    if (highs[i] != null && lows[i] != null && closes[i-1] != null) {
-      const hl = highs[i] - lows[i];
-      const hc = Math.abs(highs[i] - closes[i - 1]);
-      const lc = Math.abs(lows[i] - closes[i - 1]);
+  for (let i = pricesClose.length - 15; i < pricesClose.length - 1; i++) {
+    if (pricesHigh[i] != null && pricesLow[i] != null && pricesClose[i-1] != null) {
+      const hl = pricesHigh[i] - pricesLow[i];
+      const hc = Math.abs(pricesHigh[i] - pricesClose[i - 1]);
+      const lc = Math.abs(pricesLow[i] - pricesClose[i - 1]);
       trSum += Math.max(hl, hc, lc);
       count++;
     }
@@ -237,19 +237,19 @@ export function analyzeCRTData(data, intervalStr) {
     return { signal: 'WAIT', reason: 'Gathering data...' };
   }
 
-  let highsRaw = data.indicators.quote[0].high;
-  let lowsRaw = data.indicators.quote[0].low;
-  let closesRaw = data.indicators.quote[0].close;
-  let opensRaw = data.indicators.quote[0].open;
+  let pricesHighRaw = data.indicators.quote[0].high;
+  let pricesLowRaw = data.indicators.quote[0].low;
+  let pricesCloseRaw = data.indicators.quote[0].close;
+  let pricesOpenRaw = data.indicators.quote[0].open;
 
   let timestamps = [];
-  let highs = [], lows = [], closes = [], opens = [];
-  for (let i = 0; i < closesRaw.length; i++) {
-    if (highsRaw[i] != null && lowsRaw[i] != null && closesRaw[i] != null && opensRaw[i] != null) {
-      highs.push(highsRaw[i]);
-      lows.push(lowsRaw[i]);
-      closes.push(closesRaw[i]);
-      opens.push(opensRaw[i]);
+  let pricesHigh = [], pricesLow = [], pricesClose = [], pricesOpen = [];
+  for (let i = 0; i < pricesCloseRaw.length; i++) {
+    if (pricesHighRaw[i] != null && pricesLowRaw[i] != null && pricesCloseRaw[i] != null && pricesOpenRaw[i] != null) {
+      pricesHigh.push(pricesHighRaw[i]);
+      pricesLow.push(pricesLowRaw[i]);
+      pricesClose.push(pricesCloseRaw[i]);
+      pricesOpen.push(pricesOpenRaw[i]);
       timestamps.push(data.timestamp[i]);
     }
   }
@@ -262,7 +262,7 @@ export function analyzeCRTData(data, intervalStr) {
     
     let currentCandle = null;
 
-    for (let i = 0; i < closes.length; i++) {
+    for (let i = 0; i < pricesClose.length; i++) {
       const date = new Date(timestamps[i] * 1000);
       const hour = date.getUTCHours();
       const candleStartHour = Math.floor(hour / 4) * 4;
@@ -276,15 +276,15 @@ export function analyzeCRTData(data, intervalStr) {
         }
         currentCandle = {
           startHour: candleStartHour,
-          open: opens[i],
-          high: highs[i],
-          low: lows[i],
-          close: closes[i]
+          open: pricesOpen[i],
+          high: pricesHigh[i],
+          low: pricesLow[i],
+          close: pricesClose[i]
         };
       } else {
-        currentCandle.high = Math.max(currentCandle.high, highs[i]);
-        currentCandle.low = Math.min(currentCandle.low, lows[i]);
-        currentCandle.close = closes[i];
+        currentCandle.high = Math.max(currentCandle.high, pricesHigh[i]);
+        currentCandle.low = Math.min(currentCandle.low, pricesLow[i]);
+        currentCandle.close = pricesClose[i];
       }
     }
     if (currentCandle) {
@@ -294,29 +294,29 @@ export function analyzeCRTData(data, intervalStr) {
       aggCloses.push(currentCandle.close);
     }
 
-    highs = aggHighs;
-    lows = aggLows;
-    closes = aggCloses;
-    opens = aggOpens;
+    pricesHigh = aggHighs;
+    pricesLow = aggLows;
+    pricesClose = aggCloses;
+    pricesOpen = aggOpens;
   }
 
-  if (highs.length < 5) {
+  if (pricesHigh.length < 5) {
      return { signal: 'WAIT', reason: 'Insufficient data' };
   }
 
   // Scan the last 10 candles for the CRT pattern
-  for (let i = highs.length - 2; i >= highs.length - 10; i--) {
-    const c1High = highs[i - 2];
-    const c1Low = lows[i - 2];
+  for (let i = pricesHigh.length - 2; i >= pricesHigh.length - 10; i--) {
+    const c1High = pricesHigh[i - 2];
+    const c1Low = pricesLow[i - 2];
     const c1Mid = (c1High + c1Low) / 2;
     
-    const c2High = highs[i - 1];
-    const c2Low = lows[i - 1];
-    const c2Close = closes[i - 1];
+    const c2High = pricesHigh[i - 1];
+    const c2Low = pricesLow[i - 1];
+    const c2Close = pricesClose[i - 1];
     
-    const c3Close = closes[i];
-    const c3High = highs[i];
-    const c3Low = lows[i];
+    const c3Close = pricesClose[i];
+    const c3High = pricesHigh[i];
+    const c3Low = pricesLow[i];
 
     // Bullish CRT (BUY)
     const sweptSellSide = c2Low < c1Low;
@@ -325,11 +325,11 @@ export function analyzeCRTData(data, intervalStr) {
 
     if (sweptSellSide && closedInsideBuy && buyConfirmed) {
       let valid = true;
-      for (let j = i + 1; j < highs.length; j++) {
-         if (lows[j] < c2Low) valid = false;
+      for (let j = i + 1; j < pricesHigh.length; j++) {
+         if (pricesLow[j] < c2Low) valid = false;
       }
       if (valid) {
-        const entry = closes[closes.length - 1];
+        const entry = pricesClose[pricesClose.length - 1];
         const sl = c2Low - (c1High - c1Low) * 0.1;
         const rawTp = c1High;
         const tp = Math.min(rawTp, entry + (entry - sl) * 3.0); // cap at 3x risk
@@ -362,11 +362,11 @@ export function analyzeCRTData(data, intervalStr) {
 
     if (sweptBuySide && closedInsideSell && sellConfirmed) {
       let valid = true;
-      for (let j = i + 1; j < highs.length; j++) {
-         if (highs[j] > c2High) valid = false;
+      for (let j = i + 1; j < pricesHigh.length; j++) {
+         if (pricesHigh[j] > c2High) valid = false;
       }
       if (valid) {
-        const entry = closes[closes.length - 1];
+        const entry = pricesClose[pricesClose.length - 1];
         const sl = c2High + (c1High - c1Low) * 0.1;
         const rawTp = c1Low;
         const tp = Math.max(rawTp, entry - (sl - entry) * 3.0); // cap at 3x risk

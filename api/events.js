@@ -16,10 +16,16 @@ export default async function handler(req, res) {
   https.get(url, {
     headers: { 'User-Agent': 'Mozilla/5.0' }
   }, (response) => {
+    if (response.statusCode !== 200) {
+      return res.status(200).json([]); // Fallback to empty instead of crashing
+    }
     let data = '';
     response.on('data', chunk => data += chunk);
     response.on('end', () => {
       try {
+        if (!data || !data.trim().startsWith('[')) {
+          return res.status(200).json([]); 
+        }
         const events = JSON.parse(data);
         const now = new Date();
         
@@ -38,11 +44,13 @@ export default async function handler(req, res) {
 
         res.status(200).json(relevantEvents);
       } catch (e) {
-        res.status(500).json({ error: 'Failed to parse events' });
+        console.error('Events parse error:', e);
+        res.status(200).json([]); // Silent fallback
       }
     });
   }).on('error', (err) => {
-    res.status(500).json({ error: err.message });
+    console.error('Events fetch error:', err);
+    res.status(200).json([]); // Silent fallback
   });
 }
 

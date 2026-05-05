@@ -9,6 +9,31 @@ import JustinStrategyCard from './components/JustinStrategyCard';
 import { SignalLogProvider } from './context/SignalLogContext';
 import './App.css';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("Crash caught by Boundary:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#ff4444' }}>
+          <h2>Something went wrong.</h2>
+          <p>{this.state.error?.toString()}</p>
+          <button onClick={() => window.location.reload()} className="btn btn-primary">Reload Page</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function AppInner() {
   const [symbol, setSymbol] = useState('EURUSD');
   const [logOpen, setLogOpen] = useState(false);
@@ -50,9 +75,11 @@ function AppInner() {
 
 function App() {
   return (
-    <SignalLogProvider>
-      <AppInner />
-    </SignalLogProvider>
+    <ErrorBoundary>
+      <SignalLogProvider>
+        <AppInner />
+      </SignalLogProvider>
+    </ErrorBoundary>
   );
 }
 
