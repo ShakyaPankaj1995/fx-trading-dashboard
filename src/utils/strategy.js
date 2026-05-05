@@ -9,6 +9,7 @@ export function analyzeData(data, intervalStr) {
   let opensRaw = data.indicators.quote[0].open;
 
   let timestamps = [];
+  let highs = [], lows = [], closes = [], opens = [];
   for (let i = 0; i < closesRaw.length; i++) {
     if (highsRaw[i] != null && lowsRaw[i] != null && closesRaw[i] != null && opensRaw[i] != null) {
       highs.push(highsRaw[i]);
@@ -242,6 +243,7 @@ export function analyzeCRTData(data, intervalStr) {
   let opensRaw = data.indicators.quote[0].open;
 
   let timestamps = [];
+  let highs = [], lows = [], closes = [], opens = [];
   for (let i = 0; i < closesRaw.length; i++) {
     if (highsRaw[i] != null && lowsRaw[i] != null && closesRaw[i] != null && opensRaw[i] != null) {
       highs.push(highsRaw[i]);
