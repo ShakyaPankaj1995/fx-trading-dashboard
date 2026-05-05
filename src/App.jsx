@@ -25,7 +25,7 @@ function AppInner() {
           <div className="chart-header">
             <div className="chart-title">
               <h1 className="chart-symbol">{symbol}</h1>
-              <span className="chart-subtitle">Live Dashboard v1.1.5 (Sync: {new Date().toISOString().slice(0,16)})</span>
+              <span className="chart-subtitle">Live Dashboard v1.1.6 (Main Branch Sync)</span>
             </div>
           </div>
 
