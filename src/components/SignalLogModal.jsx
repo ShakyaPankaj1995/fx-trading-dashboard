@@ -42,7 +42,14 @@ const LogTable = ({ logs, onSelectSymbol }) => {
   const formatTime = (iso) => {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('en-IN', {
-      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+      hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  const formatDate = (iso) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('en-IN', {
+      day: '2-digit', month: 'short'
     });
   };
 
@@ -60,7 +67,8 @@ const LogTable = ({ logs, onSelectSymbol }) => {
     <table className="log-table">
       <thead>
         <tr>
-          <th>Time</th>
+          <th>Date</th>
+          <th>Start</th>
           <th>Symbol</th>
           <th>TF</th>
           <th>Strategy</th>
@@ -70,7 +78,6 @@ const LogTable = ({ logs, onSelectSymbol }) => {
           <th>TP</th>
           <th>R:R</th>
           <th>Status</th>
-          <th>Closed At</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -89,10 +96,11 @@ const LogTable = ({ logs, onSelectSymbol }) => {
 
           return (
           <tr key={log.id} className={`log-row log-row-${log.status.toLowerCase()}`}>
-            <td className="log-cell-time">{formatTime(log.timestamp)}</td>
+            <td className="log-cell-time">{formatDate(log.timestamp)}</td>
+            <td className="log-cell-time" style={{ fontWeight: 600, color: 'var(--accent-blue)' }}>{formatTime(log.timestamp)}</td>
             <td className="log-cell-symbol">{log.symbol}</td>
             <td><span className="log-tf-badge">{TIMEFRAME_LABELS[log.timeframe] || log.timeframe}</span></td>
-            <td className="log-cell-strategy">{log.strategy}</td>
+            <td className="log-cell-strategy" style={{ fontSize: '0.7rem' }}>{log.strategy}</td>
             <td>
               <span className={`log-signal-badge ${log.signal.toLowerCase()}`}>
                 {log.signal === 'BUY' ? <TrendingUp size={11}/> : <TrendingDown size={11}/>} {log.signal}
@@ -103,7 +111,6 @@ const LogTable = ({ logs, onSelectSymbol }) => {
             <td className="log-cell-mono log-cell-tp">{Number(log.tp).toFixed(5)}</td>
             <td className="log-cell-rr">{log.rr}x</td>
             <td><StatusBadge status={log.status} /></td>
-            <td className="log-cell-time">{formatTime(log.closedAt)}</td>
             <td>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button 

@@ -48,7 +48,7 @@ export function useSignalLog() {
 
       const newLog = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        timestamp: new Date().toISOString(),
+        timestamp: signal.setupTime ? new Date(signal.setupTime * 1000).toISOString() : new Date().toISOString(),
         symbol: signal.symbol,
         timeframe: signal.timeframe,
         strategy: signal.strategy,

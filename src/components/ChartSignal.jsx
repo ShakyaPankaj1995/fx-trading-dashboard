@@ -57,6 +57,7 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
             entry: analysis.entry,
             sl: analysis.sl,
             tp: analysis.tp,
+            setupTime: analysis.setupTime
           });
         }
       }
@@ -88,14 +89,21 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
     return <div className="chart-signal error"><span>{error}</span></div>;
   }
 
-  const { signal, reason, entry, sl, tp, reasoning } = signalData;
+  const { signal, reason, entry, sl, tp, reasoning, setupTime } = signalData;
   const isNeutral = signal === 'NEUTRAL' || signal === 'WAIT';
 
   return (
     <div className={`chart-signal ${isCompact ? 'compact' : ''} ${signal.toLowerCase()}`}>
       <div className="signal-left">
         <div className={`signal-badge-small ${signal.toLowerCase()}`}>{signal}</div>
-        <span className="signal-reason-small">{reason}</span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span className="signal-reason-small">{reason}</span>
+          {setupTime && (
+            <span style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
+              Start: {new Date(setupTime * 1000).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
       </div>
 
       {!isNeutral && (

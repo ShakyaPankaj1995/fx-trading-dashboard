@@ -77,6 +77,7 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
             entry: analysis.entry,
             sl: analysis.sl,
             tp: analysis.tp,
+            setupTime: analysis.setupTime
           });
         }
       }
@@ -106,7 +107,7 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
 
   if (error) return <div className="chart-signal error"><span>{error}</span></div>;
 
-  const { signal, reason, entry, sl, tp, reasoning } = signalData;
+  const { signal, reason, entry, sl, tp, reasoning, setupTime } = signalData;
   const isNeutral = signal === 'NEUTRAL' || signal === 'WAIT';
 
   return (
@@ -116,7 +117,14 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
           {signal === 'BUY' ? <TrendingUp size={10}/> : signal === 'SELL' ? <TrendingDown size={10}/> : null}
           {' '}{signal}
         </div>
-        <span className="signal-reason-small">{reason}</span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span className="signal-reason-small">{reason}</span>
+          {setupTime && (
+            <span style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
+              Start: {new Date(setupTime * 1000).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
         {smtStatus && (
           <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
             {smtStatus}

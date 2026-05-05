@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LineChart, ClipboardList, Calendar } from 'lucide-react';
 import { useSignalLogContext } from '../context/SignalLogContext';
 
-const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
+const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog, onOpenEvents }) => {
   const assets = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'S&P500', 'NASDAQ'];
   const { logs, addSignal } = useSignalLogContext();
   const activeCount = logs.filter(l => l.status === 'ACTIVE').length;
@@ -11,7 +11,7 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
     <nav className="navbar">
       <a href="/" className="nav-brand">
         <LineChart className="nav-brand-icon" size={28} />
-        <span>FX Master <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>v1.1.0</small></span>
+        <span>FX Master <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>v1.1.7</small></span>
       </a>
 
       <div className="nav-controls" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -38,7 +38,8 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
               signal: 'BUY',
               entry: 1.0850,
               sl: 1.0820,
-              tp: 1.0910
+              tp: 1.0910,
+              setupTime: Math.floor(Date.now() / 1000)
             });
             alert('Test Signal Added for EURUSD 15M! Looking at the 15M chart now.');
           }}
@@ -49,7 +50,7 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
         </button>
 
         <button
-          onClick={() => document.querySelector('.events-card')?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={onOpenEvents}
           className="btn btn-outline"
           style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px' }}
         >

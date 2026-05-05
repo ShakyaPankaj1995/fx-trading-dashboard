@@ -3,7 +3,7 @@ import NavBar from './components/NavBar';
 import ChartGrid from './components/ChartGrid';
 import StrategyCard from './components/StrategyCard';
 import CRTStrategyCard from './components/CRTStrategyCard';
-import EconomicEvents from './components/EconomicEvents';
+import EconomicEventsModal from './components/EconomicEventsModal';
 import SignalLogModal from './components/SignalLogModal';
 import JustinStrategyCard from './components/JustinStrategyCard';
 import { SignalLogProvider } from './context/SignalLogContext';
@@ -37,6 +37,7 @@ class ErrorBoundary extends React.Component {
 function AppInner() {
   const [symbol, setSymbol] = useState('EURUSD');
   const [logOpen, setLogOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
 
   return (
     <div className="app-container">
@@ -44,6 +45,7 @@ function AppInner() {
         currentSymbol={symbol}
         onSymbolAdd={setSymbol}
         onOpenLog={() => setLogOpen(true)}
+        onOpenEvents={() => setEventsOpen(true)}
       />
 
       <main className="main-content">
@@ -51,14 +53,13 @@ function AppInner() {
           <div className="chart-header">
             <div className="chart-title">
               <h1 className="chart-symbol">{symbol}</h1>
-              <span className="chart-subtitle">Live Dashboard v1.1.6 (Main Branch Sync)</span>
+              <span className="chart-subtitle">Live Dashboard v1.1.7 (Macro Modal Update)</span>
             </div>
           </div>
 
           <StrategyCard symbol={symbol} />
           <CRTStrategyCard symbol={symbol} />
           <JustinStrategyCard symbol={symbol} />
-          <EconomicEvents symbol={symbol} />
           <ChartGrid symbol={symbol} />
         </div>
       </main>
@@ -67,6 +68,13 @@ function AppInner() {
         <SignalLogModal 
           onClose={() => setLogOpen(false)} 
           onSelectSymbol={setSymbol}
+        />
+      )}
+
+      {eventsOpen && (
+        <EconomicEventsModal 
+          symbol={symbol}
+          onClose={() => setEventsOpen(false)}
         />
       )}
     </div>
