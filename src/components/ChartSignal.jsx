@@ -100,7 +100,7 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
           <span className="signal-reason-small">{reason}</span>
           {setupTime && (
             <span style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
-              Start: {new Date(setupTime * 1000).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
+              Start: {new Date(setupTime * 1000).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
             </span>
           )}
         </div>

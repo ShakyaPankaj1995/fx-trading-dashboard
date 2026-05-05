@@ -42,14 +42,14 @@ const LogTable = ({ logs, onSelectSymbol }) => {
   const formatTime = (iso) => {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('en-IN', {
-      hour: '2-digit', minute: '2-digit'
+      hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata'
     });
   };
 
   const formatDate = (iso) => {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('en-IN', {
-      day: '2-digit', month: 'short'
+      day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata'
     });
   };
 
