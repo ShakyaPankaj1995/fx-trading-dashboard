@@ -4,7 +4,7 @@ import { useSignalLogContext } from '../context/SignalLogContext';
 
 const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
   const assets = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'S&P500', 'NASDAQ'];
-  const { logs } = useSignalLogContext();
+  const { logs, addSignal } = useSignalLogContext();
   const activeCount = logs.filter(l => l.status === 'ACTIVE').length;
 
   return (
@@ -27,6 +27,24 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
         ))}
 
         <div style={{ width: '1px', height: '24px', background: 'var(--border-color)', margin: '0 4px' }} />
+
+        <button
+          onClick={() => {
+            addSignal({
+              symbol: 'EURUSD',
+              timeframe: '15',
+              strategy: 'CRT (AMD)',
+              signal: 'BUY',
+              entry: 1.0850,
+              sl: 1.0820,
+              tp: 1.0910
+            });
+          }}
+          className="btn btn-outline"
+          style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', color: 'var(--buy-green)', borderColor: 'var(--buy-green)' }}
+        >
+          + Test
+        </button>
 
         <button
           onClick={onOpenLog}
