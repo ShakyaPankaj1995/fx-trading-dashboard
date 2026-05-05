@@ -1,7 +1,16 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { analyzeData, analyzeCRTData } from './lib/strategy.js';
 import { analyzeJustinSetup } from './lib/justinStrategy.js';
 import https from 'https';
+
+const LOG_KEY = 'fx_signal_log_v2';
+
+function getRedis() {
+  const url   = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
 
 const ASSETS = [
   { name: 'EURUSD', ticker: 'EURUSD=X' },
@@ -49,7 +58,8 @@ export default async function handler(req, res) {
   // For Vercel Cron, you can check the CRON_SECRET header
   
   try {
-    let logs = await kv.get(LOG_KEY) || [];
+    const redis = getRedis();
+    let logs = (redis ? await redis.get(LOG_KEY) : null) || [];
     const now = new Date();
     const thirtyDaysAgo = now.getTime() - (30 * 24 * 60 * 60 * 1000);
     
@@ -137,8 +147,8 @@ export default async function handler(req, res) {
       }
     }
 
-    await kv.set(LOG_KEY, logs.slice(0, 500)); // Keep a reasonable limit but enough for 30 days
-    return res.status(200).json({ status: 'Cron successful', signalsFound: activeLogs.length });
+    if (redis) await redis.set(LOG_KEY, logs.slice(0, 500));
+    return res.status(200).json({ status: 'Scan complete', signalsFound: activeLogs.length });
   } catch (error) {
     console.error('Cron job error:', error);
     return res.status(500).json({ error: error.message });

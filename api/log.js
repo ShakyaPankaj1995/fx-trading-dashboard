@@ -1,20 +1,29 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const LOG_KEY = 'fx_signal_log_v2';
+
+function getRedis() {
+  const url   = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
 
 export default async function handler(req, res) {
-  const LOG_KEY = 'fx_signal_log_v2';
+  const redis = getRedis();
 
   if (req.method === 'GET') {
     try {
-      const logs = await kv.get(LOG_KEY) || [];
+      const logs = redis ? (await redis.get(LOG_KEY) || []) : [];
       return res.status(200).json(logs);
     } catch (error) {
-      return res.status(500).json({ error: 'Failed to fetch logs' });
+      return res.status(200).json([]); // graceful fallback
     }
   }
 
   if (req.method === 'DELETE') {
     try {
-      await kv.set(LOG_KEY, []);
+      if (redis) await redis.set(LOG_KEY, []);
       return res.status(200).json({ message: 'Logs cleared' });
     } catch (error) {
       return res.status(500).json({ error: 'Failed to clear logs' });
@@ -22,10 +31,9 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    // For manual sync or cron updates
     try {
       const { logs } = req.body;
-      await kv.set(LOG_KEY, logs);
+      if (redis) await redis.set(LOG_KEY, logs);
       return res.status(200).json({ message: 'Logs updated' });
     } catch (error) {
       return res.status(500).json({ error: 'Failed to update logs' });
