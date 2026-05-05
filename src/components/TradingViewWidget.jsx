@@ -30,28 +30,20 @@ const TradingViewWidget = ({ symbol, interval }) => {
     });
 
     // 1. Add Setup Series first (so they are BEHIND the candles)
-    const rewardSeries = chart.addBaselineSeries({
-      baseValue: { type: 'price', price: 0 },
-      topFillColor1: 'rgba(14, 203, 129, 0.3)',
-      topFillColor2: 'rgba(14, 203, 129, 0.05)',
-      topLineColor: 'rgba(14, 203, 129, 0.4)',
-      bottomFillColor1: 'transparent',
-      bottomFillColor2: 'transparent',
-      bottomLineColor: 'transparent',
+    const rewardSeries = chart.addAreaSeries({
+      topColor: 'rgba(14, 203, 129, 0.3)',
+      bottomColor: 'rgba(14, 203, 129, 0.05)',
+      lineColor: 'rgba(14, 203, 129, 0.4)',
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
       lineWidth: 1,
     });
 
-    const riskSeries = chart.addBaselineSeries({
-      baseValue: { type: 'price', price: 0 },
-      topFillColor1: 'transparent',
-      topFillColor2: 'transparent',
-      topLineColor: 'transparent',
-      bottomFillColor1: 'rgba(246, 70, 93, 0.3)',
-      bottomFillColor2: 'rgba(246, 70, 93, 0.05)',
-      bottomLineColor: 'rgba(246, 70, 93, 0.4)',
+    const riskSeries = chart.addAreaSeries({
+      topColor: 'rgba(246, 70, 93, 0.3)',
+      bottomColor: 'rgba(246, 70, 93, 0.05)',
+      lineColor: 'rgba(246, 70, 93, 0.4)',
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
@@ -118,17 +110,13 @@ const TradingViewWidget = ({ symbol, interval }) => {
                              (trendSignal.signal === 'BUY' || trendSignal.signal === 'SELL') ? trendSignal : null;
 
         if (activeSignal && activeSignal.setupTime) {
-          // Update Baselines for the boxes
-          rewardSeries.applyOptions({ baseValue: { type: 'price', price: activeSignal.entry } });
-          riskSeries.applyOptions({ baseValue: { type: 'price', price: activeSignal.entry } });
-
           // Handle Short vs Long coloring
           if (activeSignal.signal === 'SELL') {
              rewardSeries.applyOptions({ 
-               topFillColor1: 'rgba(246, 70, 93, 0.3)', topFillColor2: 'rgba(246, 70, 93, 0.05)', topLineColor: 'rgba(246, 70, 93, 0.4)' 
+               topColor: 'rgba(246, 70, 93, 0.3)', bottomColor: 'rgba(246, 70, 93, 0.05)', lineColor: 'rgba(246, 70, 93, 0.4)' 
              });
              riskSeries.applyOptions({ 
-               bottomFillColor1: 'rgba(14, 203, 129, 0.3)', bottomFillColor2: 'rgba(14, 203, 129, 0.05)', bottomLineColor: 'rgba(14, 203, 129, 0.4)' 
+               topColor: 'rgba(14, 203, 129, 0.3)', bottomColor: 'rgba(14, 203, 129, 0.05)', lineColor: 'rgba(14, 203, 129, 0.4)' 
              });
           }
 
