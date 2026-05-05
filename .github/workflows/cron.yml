@@ -1,0 +1,17 @@
+name: Market Scanner Cron
+
+on:
+  schedule:
+    # Runs every hour (free on GitHub Actions)
+    - cron: '0 * * * *'
+  workflow_dispatch:   # Also allows manual trigger from GitHub UI
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Market Scan
+        run: |
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
+            "${{ secrets.VERCEL_APP_URL }}/api/cron"
+        timeout-minutes: 2
