@@ -38,7 +38,7 @@ const calcStats = (logs) => {
   };
 };
 
-const LogTable = ({ logs }) => {
+const LogTable = ({ logs, onSelectSymbol }) => {
   const formatTime = (iso) => {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('en-IN', {
@@ -71,10 +71,23 @@ const LogTable = ({ logs }) => {
           <th>R:R</th>
           <th>Status</th>
           <th>Closed At</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        {logs.map(log => (
+        {logs.map(log => {
+          const tvTicker = {
+            'EURUSD': 'FX:EURUSD',
+            'GBPUSD': 'FX:GBPUSD',
+            'USDJPY': 'FX:USDJPY',
+            'XAUUSD': 'OANDA:XAUUSD',
+            'S&P500': 'OANDA:SPX500USD',
+            'NASDAQ': 'OANDA:NAS100USD'
+          }[log.symbol] || log.symbol;
+
+          const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=${log.timeframe}`;
+
+          return (
           <tr key={log.id} className={`log-row log-row-${log.status.toLowerCase()}`}>
             <td className="log-cell-time">{formatTime(log.timestamp)}</td>
             <td className="log-cell-symbol">{log.symbol}</td>
@@ -91,8 +104,29 @@ const LogTable = ({ logs }) => {
             <td className="log-cell-rr">{log.rr}x</td>
             <td><StatusBadge status={log.status} /></td>
             <td className="log-cell-time">{formatTime(log.closedAt)}</td>
+            <td>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button 
+                  onClick={() => onSelectSymbol(log.symbol)}
+                  className="btn-action" 
+                  title="View Setup on Dashboard"
+                >
+                  <LayoutList size={14} />
+                </button>
+                <a 
+                  href={tvUrl} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="btn-action"
+                  title="Open in TradingView"
+                >
+                  <Activity size={14} />
+                </a>
+              </div>
+            </td>
           </tr>
-        ))}
+          );
+        })}
       </tbody>
     </table>
   );
@@ -120,7 +154,7 @@ const StatsBar = ({ stats }) => (
   </div>
 );
 
-const SignalLogModal = ({ onClose }) => {
+const SignalLogModal = ({ onClose, onSelectSymbol }) => {
   const { logs, clearLogs } = useSignalLogContext();
   const [activeTab, setActiveTab] = useState('all');
 
@@ -174,7 +208,13 @@ const SignalLogModal = ({ onClose }) => {
 
         {/* Table */}
         <div className="log-table-wrapper">
-          <LogTable logs={filteredLogs} />
+          <LogTable 
+            logs={filteredLogs} 
+            onSelectSymbol={(sym) => {
+              onSelectSymbol(sym);
+              onClose();
+            }} 
+          />
         </div>
 
       </div>

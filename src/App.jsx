@@ -36,7 +36,12 @@ function AppInner() {
         </div>
       </main>
 
-      {logOpen && <SignalLogModal onClose={() => setLogOpen(false)} />}
+      {logOpen && (
+        <SignalLogModal 
+          onClose={() => setLogOpen(false)} 
+          onSelectSymbol={setSymbol}
+        />
+      )}
     </div>
   );
 }
