@@ -180,6 +180,26 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button 
+              onClick={async () => {
+                const btn = document.getElementById('scan-btn');
+                if (btn) btn.innerText = 'Scanning...';
+                try {
+                  await fetch('/api/cron');
+                  alert('Market Scan Complete! New signals logged.');
+                  window.location.reload();
+                } catch (e) {
+                  alert('Scan failed. Ensure KV is connected.');
+                } finally {
+                  if (btn) btn.innerText = 'Scan Market';
+                }
+              }} 
+              id="scan-btn"
+              className="btn btn-primary" 
+              style={{ fontSize: '0.75rem', padding: '4px 12px' }}
+            >
+              Scan Market
+            </button>
+            <button 
               onClick={() => {
                 const testSignal = {
                   symbol: 'EURUSD',
