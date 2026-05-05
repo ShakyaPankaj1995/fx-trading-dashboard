@@ -30,6 +30,7 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
 
         <button
           onClick={() => {
+            onSymbolAdd('EURUSD');
             addSignal({
               symbol: 'EURUSD',
               timeframe: '15',
@@ -39,11 +40,12 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
               sl: 1.0820,
               tp: 1.0910
             });
+            alert('Test Signal Added for EURUSD 15M! Looking at the 15M chart now.');
           }}
           className="btn btn-outline"
           style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', color: 'var(--buy-green)', borderColor: 'var(--buy-green)' }}
         >
-          + Test
+          + Test Setup
         </button>
 
         <button
