@@ -5,6 +5,7 @@ import StrategyCard from './components/StrategyCard';
 import CRTStrategyCard from './components/CRTStrategyCard';
 import EconomicEvents from './components/EconomicEvents';
 import SignalLogModal from './components/SignalLogModal';
+import JustinStrategyCard from './components/JustinStrategyCard';
 import { SignalLogProvider } from './context/SignalLogContext';
 import './App.css';
 
@@ -31,6 +32,7 @@ function AppInner() {
 
           <StrategyCard symbol={symbol} />
           <CRTStrategyCard symbol={symbol} />
+          <JustinStrategyCard symbol={symbol} />
           <EconomicEvents symbol={symbol} />
           <ChartGrid symbol={symbol} />
         </div>

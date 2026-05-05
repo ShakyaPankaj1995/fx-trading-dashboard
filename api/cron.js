@@ -1,5 +1,6 @@
 import { kv } from '@vercel/kv';
 import { analyzeData, analyzeCRTData } from './lib/strategy.js';
+import { analyzeJustinSetup } from './lib/justinStrategy.js';
 import https from 'https';
 
 const ASSETS = [
@@ -71,6 +72,22 @@ export default async function handler(req, res) {
           const crtAnalysis = analyzeCRTData(chartData, tf.val);
           if (crtAnalysis.signal === 'BUY' || crtAnalysis.signal === 'SELL') {
             logs = addLogIfNew(logs, asset.name, tf.val, 'CRT (AMD)', crtAnalysis);
+          }
+
+          // Run Justin Setup (with SMT correlated asset)
+          const smtPairs = {
+            'NASDAQ': 'ES=F', 'S&P500': 'NQ=F',
+            'EURUSD': 'GBPUSD=X', 'GBPUSD': 'EURUSD=X',
+            'XAUUSD': 'SI=F',
+          };
+          let correlatedData = null;
+          const correlatedTicker = smtPairs[asset.name];
+          if (correlatedTicker) {
+            try { correlatedData = await fetchYF(correlatedTicker, tf.yf, tf.range); } catch (_) {}
+          }
+          const justinAnalysis = analyzeJustinSetup(chartData, correlatedData, tf.val);
+          if (justinAnalysis.signal === 'BUY' || justinAnalysis.signal === 'SELL') {
+            logs = addLogIfNew(logs, asset.name, tf.val, 'Justin Setup', justinAnalysis);
           }
         } catch (e) {
           console.error(`Error processing ${asset.name} ${tf.val}:`, e.message);
