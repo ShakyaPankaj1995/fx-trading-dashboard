@@ -23,10 +23,11 @@ export default async function handler(req, res) {
         const events = JSON.parse(data);
         const now = new Date();
         
-        // 1. Filter: High Impact & Future/Recent
+        // 1. Filter: High & Medium Impact & Future/Recent
         const filtered = events.filter(e => {
           const eventDate = new Date(e.date);
-          return e.impact === 'High' && eventDate > new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const impactMatch = e.impact === 'High' || e.impact === 'Medium';
+          return impactMatch && eventDate > new Date(now.getTime() - 48 * 60 * 60 * 1000);
         });
 
         // 2. Add Prediction Logic for the specific symbol

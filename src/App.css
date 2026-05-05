@@ -828,6 +828,13 @@
   letter-spacing: 1px;
 }
 
+.event-impact.medium {
+  color: #ffa500;
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+}
+
 .event-prediction {
   display: flex;
   gap: 16px;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LineChart, ClipboardList } from 'lucide-react';
+import { LineChart, ClipboardList, Calendar } from 'lucide-react';
 import { useSignalLogContext } from '../context/SignalLogContext';
 
 const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
@@ -46,6 +46,15 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog }) => {
           style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', color: 'var(--buy-green)', borderColor: 'var(--buy-green)' }}
         >
           + Test Setup
+        </button>
+
+        <button
+          onClick={() => document.querySelector('.events-card')?.scrollIntoView({ behavior: 'smooth' })}
+          className="btn btn-outline"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px' }}
+        >
+          <Calendar size={16} color="var(--accent-blue)" />
+          <span style={{ fontSize: '0.85rem' }}>Economic Calendar</span>
         </button>
 
         <button

@@ -62,7 +62,7 @@ const EconomicEvents = ({ symbol }) => {
                   <span className="event-title">{event.title}</span>
                   <div className="event-meta">
                     <span className="event-date">{new Date(event.date).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                    <span className="event-impact high">HIGH IMPACT</span>
+                    <span className={`event-impact ${event.impact.toLowerCase()}`}>{event.impact.toUpperCase()} IMPACT</span>
                   </div>
                 </div>
                 
