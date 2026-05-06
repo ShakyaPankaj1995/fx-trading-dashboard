@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { X, CheckCircle2, XCircle, Clock, Trash2, TrendingUp, TrendingDown, Activity, Crosshair, LayoutList } from 'lucide-react';
 import { useSignalLogContext } from '../context/SignalLogContext';
 
@@ -39,6 +39,34 @@ const calcStats = (logs) => {
 };
 
 const LogTable = ({ logs, onSelectSymbol }) => {
+  const [prices, setPrices] = useState({});
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      const symbols = [...new Set(logs.filter(l => l.status === 'ACTIVE').map(l => l.symbol))];
+      if (symbols.length === 0) return;
+
+      const newPrices = { ...prices };
+      for (const sym of symbols) {
+        try {
+          let ticker = {
+            'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X', 'USDJPY': 'USDJPY=X',
+            'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F'
+          }[sym] || `${sym}=X`;
+          const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=1m&range=1d`);
+          const data = await res.json();
+          const current = data.chart.result[0].meta.regularMarketPrice;
+          newPrices[sym] = current;
+        } catch (_) {}
+      }
+      setPrices(newPrices);
+    };
+
+    fetchPrices();
+    const id = setInterval(fetchPrices, 15000); // Update every 15s
+    return () => clearInterval(id);
+  }, [logs]);
+
   const formatTime = (iso) => {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('en-IN', {
@@ -51,6 +79,16 @@ const LogTable = ({ logs, onSelectSymbol }) => {
     return new Date(iso).toLocaleString('en-IN', {
       day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata'
     });
+  };
+
+  const calcPnL = (log) => {
+    if (log.status !== 'ACTIVE') {
+      const diff = log.signal === 'BUY' ? (log.tp - log.entry) : (log.entry - log.tp);
+      return log.status === 'SUCCESS' ? diff : -Math.abs(log.entry - log.sl);
+    }
+    const current = prices[log.symbol];
+    if (!current) return null;
+    return log.signal === 'BUY' ? (current - log.entry) : (log.entry - current);
   };
 
   if (logs.length === 0) {
@@ -74,22 +112,21 @@ const LogTable = ({ logs, onSelectSymbol }) => {
           <th>Strategy</th>
           <th>Signal</th>
           <th>Entry</th>
-          <th>SL</th>
-          <th>TP</th>
-          <th>R:R</th>
+          <th>PnL</th>
           <th>Status</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {logs.map(log => {
+          const pnl = calcPnL(log);
+          const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(log.symbol);
+          const multiplier = isForex ? 10000 : 1;
+          const pnlFormatted = pnl !== null ? (pnl * multiplier).toFixed(1) : '...';
+          
           const tvTicker = {
-            'EURUSD': 'FX:EURUSD',
-            'GBPUSD': 'FX:GBPUSD',
-            'USDJPY': 'FX:USDJPY',
-            'XAUUSD': 'OANDA:XAUUSD',
-            'S&P500': 'OANDA:SPX500USD',
-            'NASDAQ': 'OANDA:NAS100USD'
+            'EURUSD': 'FX:EURUSD', 'GBPUSD': 'FX:GBPUSD', 'USDJPY': 'FX:USDJPY',
+            'XAUUSD': 'OANDA:XAUUSD', 'S&P500': 'OANDA:SPX500USD', 'NASDAQ': 'OANDA:NAS100USD'
           }[log.symbol] || log.symbol;
 
           const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=${log.timeframe}`;
@@ -106,28 +143,28 @@ const LogTable = ({ logs, onSelectSymbol }) => {
                 {log.signal === 'BUY' ? <TrendingUp size={11}/> : <TrendingDown size={11}/>} {log.signal}
               </span>
             </td>
-            <td className="log-cell-mono">{Number(log.entry).toFixed(5)}</td>
-            <td className="log-cell-mono log-cell-sl">{Number(log.sl).toFixed(5)}</td>
-            <td className="log-cell-mono log-cell-tp">{Number(log.tp).toFixed(5)}</td>
-            <td className="log-cell-rr">{log.rr}x</td>
+            <td className="log-cell-mono">{Number(log.entry).toFixed(isForex ? 5 : 2)}</td>
+            <td className={`log-cell-mono ${pnl > 0 ? 'log-pnl-up' : pnl < 0 ? 'log-pnl-down' : ''}`} style={{ fontWeight: 700 }}>
+              {pnl > 0 ? '+' : ''}{pnlFormatted}
+            </td>
             <td><StatusBadge status={log.status} /></td>
             <td>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button 
-                  onClick={() => onSelectSymbol(log.symbol)}
-                  className="btn-action" 
-                  title="View Setup on Dashboard"
+                   onClick={() => onSelectSymbol(log.symbol)}
+                   className="btn-action" 
+                   title="View Setup on Dashboard"
                 >
-                  <LayoutList size={14} />
+                   <LayoutList size={14} />
                 </button>
                 <a 
-                  href={tvUrl} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="btn-action"
-                  title="Open in TradingView"
+                   href={tvUrl} 
+                   target="_blank" 
+                   rel="noreferrer"
+                   className="btn-action"
+                   title="Open in TradingView"
                 >
-                  <Activity size={14} />
+                   <Activity size={14} />
                 </a>
               </div>
             </td>

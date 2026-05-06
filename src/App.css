@@ -749,6 +749,9 @@
 .log-status-success { background: rgba(14,203,129,0.15); color: var(--buy-green); }
 .log-status-failed  { background: rgba(246,70,93,0.15);  color: var(--sell-red); }
 
+.log-pnl-up { color: var(--buy-green); }
+.log-pnl-down { color: var(--sell-red); }
+
 /* Economic Events */
 .events-card {
   background: var(--bg-secondary);
