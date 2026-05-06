@@ -40,6 +40,7 @@ const calcStats = (logs) => {
 
 const LogTable = ({ logs, onSelectSymbol }) => {
   const [prices, setPrices] = useState({});
+  const { removeSignal } = useSignalLogContext();
 
   useEffect(() => {
     const fetchPrices = async () => {
@@ -166,6 +167,14 @@ const LogTable = ({ logs, onSelectSymbol }) => {
                 >
                    <Activity size={14} />
                 </a>
+                <button 
+                   onClick={() => removeSignal(log.id)}
+                   className="btn-action" 
+                   title="Delete Signal"
+                   style={{ color: 'var(--sell-red)' }}
+                >
+                   <Trash2 size={14} />
+                </button>
               </div>
             </td>
           </tr>

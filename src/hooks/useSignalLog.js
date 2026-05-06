@@ -1,35 +1,58 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const STORAGE_KEY = 'fx_signal_log'; // Keep local storage as a fallback/cache
+const STORAGE_KEY = 'fx_signal_log_v3';
 
 export function useSignalLog() {
-  const [logs, setLogs] = useState([]);
+  // 1. Initialize from LocalStorage immediately
+  const [logs, setLogs] = useState(() => {
+    try {
+      const local = localStorage.getItem(STORAGE_KEY);
+      return local ? JSON.parse(local) : [];
+    } catch (e) { return []; }
+  });
+
+  // Sync state to LocalStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+  }, [logs]);
 
   const fetchLogs = useCallback(async () => {
     try {
       const res = await fetch('/api/log');
       if (res.ok) {
-        const data = await res.json();
-        setLogs(data);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      } else {
-        // Fallback to local storage if API fails
-        const local = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-        setLogs(local);
+        const serverData = await res.json();
+        if (Array.isArray(serverData)) {
+          setLogs(prev => {
+            // Merge: Keep local, add new from server if ID doesn't exist
+            const localIds = new Set(prev.map(l => l.id));
+            const newFromServer = serverData.filter(sl => !localIds.has(sl.id));
+            if (newFromServer.length === 0) {
+              // Also update status of existing logs if server has newer info
+              return prev.map(pl => {
+                const updated = serverData.find(sl => sl.id === pl.id);
+                return (updated && updated.status !== pl.status) ? updated : pl;
+              });
+            }
+            return [...newFromServer, ...prev].slice(0, 500);
+          });
+        }
       }
     } catch (error) {
-      const local = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      setLogs(local);
+      console.error('Sync failed, using local data');
     }
   }, []);
 
+  const syncToServer = async (currentLogs) => {
+    try {
+      await fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logs: currentLogs })
+      });
+    } catch (e) { console.error('Cloud sync failed'); }
+  };
+
   const addSignal = useCallback(async (signal) => {
-    // Note: The backend Cron job will identify and save signals in the background.
-    // This frontend addSignal is only for instant feedback if the user is browsing.
-    // However, to keep things consistent, we should push it to the server if needed.
-    // But since the Cron job runs every 5 mins, we can just let it handle it.
-    // To ensure the user sees it immediately, we update local state.
-    
     setLogs(prev => {
       const tenMinsAgo = Date.now() - 10 * 60 * 1000;
       const isDuplicate = prev.some(log =>
@@ -42,6 +65,7 @@ export function useSignalLog() {
       );
       if (isDuplicate) return prev;
 
+      const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(signal.symbol);
       const rr = signal.signal === 'BUY'
         ? ((signal.tp - signal.entry) / (signal.entry - signal.sl)).toFixed(2)
         : ((signal.entry - signal.tp) / (signal.sl - signal.entry)).toFixed(2);
@@ -62,34 +86,34 @@ export function useSignalLog() {
       };
 
       const updated = [newLog, ...prev].slice(0, 500);
-      
-      // Sync with server
-      fetch('/api/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logs: updated })
-      }).catch(console.error);
+      syncToServer(updated);
+      return updated;
+    });
+  }, []);
 
+  const removeSignal = useCallback(async (id) => {
+    setLogs(prev => {
+      const updated = prev.filter(l => l.id !== id);
+      syncToServer(updated);
       return updated;
     });
   }, []);
 
   const clearLogs = useCallback(async () => {
+    if (!window.confirm('Are you sure you want to clear all logs? This cannot be undone.')) return;
     try {
       await fetch('/api/log', { method: 'DELETE' });
       setLogs([]);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
     } catch (error) {
       console.error('Failed to clear logs on server');
     }
   }, []);
 
-  // Initial fetch
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 30000); // Sync every 30 seconds
+    const interval = setInterval(fetchLogs, 30000);
     return () => clearInterval(interval);
   }, [fetchLogs]);
 
-  return { logs, addSignal, clearLogs };
+  return { logs, addSignal, removeSignal, clearLogs };
 }
