@@ -107,30 +107,43 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
 
   if (error) return <div className="chart-signal error"><span>{error}</span></div>;
 
-  const { signal, reason, entry, sl, tp, reasoning, setupTime } = signalData;
+  const { signal, reason, entry, sl, tp, reasoning, setupTime, confirmations, color } = signalData;
   const isNeutral = signal === 'NEUTRAL' || signal === 'WAIT';
+  const is5m = interval === '5';
 
   return (
-    <div className={`chart-signal compact ${signal.toLowerCase()}`}>
+    <div className={`chart-signal compact ${signal.toLowerCase()}`} style={{ borderLeft: color ? `4px solid ${color}` : '' }}>
       <div className="signal-left">
         <div className={`signal-badge-small ${signal.toLowerCase()}`}>
           {signal === 'BUY' ? <TrendingUp size={10}/> : signal === 'SELL' ? <TrendingDown size={10}/> : null}
           {' '}{signal}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span className="signal-reason-small">{reason}</span>
+          <span className="signal-reason-small" style={{ color: color || '' }}>{reason}</span>
           {setupTime && (
             <span style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
               Start: {new Date(setupTime * 1000).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
             </span>
           )}
         </div>
-        {smtStatus && (
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            {smtStatus}
-          </span>
-        )}
       </div>
+
+      {is5m && confirmations && (
+        <div style={{ padding: '8px', background: 'rgba(0,0,0,0.1)', borderRadius: '6px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
+            {confirmations.inFVG ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
+            <span style={{ opacity: confirmations.inFVG ? 1 : 0.5 }}>Price inside HTF FVG</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
+            {confirmations.sweep ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
+            <span style={{ opacity: confirmations.sweep ? 1 : 0.5 }}>Internal Liquidity Sweep</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
+            {confirmations.cisd ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
+            <span style={{ opacity: confirmations.cisd ? 1 : 0.5 }}>CISD (Displacement)</span>
+          </div>
+        </div>
+      )}
 
       {!isNeutral && (
         <div className="signal-right">

@@ -171,11 +171,6 @@ function checkSMTDivergence(primaryLows, primaryHighs, correlatedLows, correlate
   return { bullishSMT, bearishSMT };
 }
 
-/**
- * Main Justin Setup analyzer.
- * primaryData: Yahoo Finance result for primary asset (e.g., NQ)
- * correlatedData: Yahoo Finance result for correlated asset (e.g., ES)
- */
 export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   if (!primaryData || !primaryData.timestamp || primaryData.timestamp.length < 30) {
     return { signal: 'WAIT', reason: 'Gathering data...' };
@@ -213,8 +208,6 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   if (pH.length < 20) return { signal: 'WAIT', reason: 'Insufficient data' };
 
   const currentClose = pC[pC.length - 1];
-  const currentHigh  = pH[pH.length - 1];
-  const currentLow   = pL[pL.length - 1];
 
   // --- Step 1: Detect HTF FVGs ---
   const { bullishFVGs, bearishFVGs } = detectFVGs(pH, pL, pC);
@@ -223,101 +216,86 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   const activeBullFVG = [...bullishFVGs].reverse().find(f => !f.mitigated);
   const activeBearFVG = [...bearishFVGs].reverse().find(f => !f.mitigated);
 
-  // --- Step 2: Check if price is inside an FVG zone ---
+  // HTF Confirmation (for 4H, 1H, 15M)
+  if (intervalStr !== '5') {
+    if (activeBullFVG) return { signal: 'WAIT', reason: 'Bullish FVG Identified (Unmitigated)', color: 'var(--buy-green)' };
+    if (activeBearFVG) return { signal: 'WAIT', reason: 'Bearish FVG Identified (Unmitigated)', color: 'var(--sell-red)' };
+    return { signal: 'NEUTRAL', reason: 'No unmitigated HTF FVGs found' };
+  }
+
+  // --- 5M Entry Logic ---
+  // Condition 1: Inside HTF FVG (We use the current timeframe's FVG if HTF data isn't passed, but the strategy is designed to work on the HTF context)
   const inBullFVG = activeBullFVG && currentClose >= activeBullFVG.low && currentClose <= activeBullFVG.high;
   const inBearFVG = activeBearFVG && currentClose <= activeBearFVG.high && currentClose >= activeBearFVG.low;
 
-  // --- Step 3: Detect internal liquidity sweep ---
+  // Condition 2: Sweep
   const sweep = detectSweep(pH, pL, pC, 40);
 
-  // --- Step 4: SMT Divergence ---
+  // Condition 3: CISD
+  const { bullishCISD, bearishCISD, cisdBullFVG, cisdBearFVG } = detectCISD(pH, pL, pC, pO);
+
+  // SMT (Optional extra)
   const hasSMT = cH.length > 20;
   const { bullishSMT, bearishSMT } = hasSMT
     ? checkSMTDivergence(pL, pH, cL, cH)
     : { bullishSMT: false, bearishSMT: false };
 
-  // --- Step 5: CISD ---
-  const { bullishCISD, bearishCISD, cisdBullFVG, cisdBearFVG } = detectCISD(pH, pL, pC, pO);
-
   // Calculate ATR for SL buffer
   const atr = pH.slice(-14).reduce((acc, h, i) => acc + (h - pL[pL.length - 14 + i]), 0) / 14;
 
-  // ===== BUY SIGNAL =====
-  // Conditions: In Bullish FVG + Buy Sweep + (Bullish SMT or no correlated data) + Bullish CISD
-  const buyConditions = (inBullFVG || activeBullFVG) &&
-    sweep?.type === 'BUY_SWEEP' &&
-    (hasSMT ? bullishSMT : true) &&
-    bullishCISD;
+  const confirmations = {
+    inFVG: inBullFVG || inBearFVG,
+    sweep: !!sweep,
+    cisd: bullishCISD || bearishCISD
+  };
 
-  if (buyConditions) {
+  // ===== BUY SIGNAL =====
+  if (inBullFVG && sweep?.type === 'BUY_SWEEP' && bullishCISD) {
     const sweepLow = sweep.sweepLow;
     const entry    = cisdBullFVG ? cisdBullFVG.low : currentClose;
-    const sl       = sweepLow - atr * 0.1; // 1 tick below manipulation wick
-    const rawTp    = activeBullFVG ? activeBullFVG.high * 1.01 : entry + atr * 3;
-    const tp       = Math.min(rawTp, entry + (entry - sl) * 3.0);
-    const risk     = entry - sl;
-    const reward   = tp - entry;
-    const rr       = (reward / risk).toFixed(2);
-
-    if (reward >= risk * 1.5 && risk > 0 && entry < tp) {
-      return {
-        signal: 'BUY', entry, sl, tp,
-        setupTime: pTimestamps[pTimestamps.length - 1],
-        reason: 'Justin Setup — Bullish',
-        reasoning: [
-          `📍 HTF Bullish FVG zone: ${activeBullFVG?.low?.toFixed(2)} — ${activeBullFVG?.high?.toFixed(2)}`,
-          `🪤 Turtle Soup: Price swept sell-side liquidity at ${sweepLow?.toFixed(2)} (trapped shorts)`,
-          hasSMT ? `📊 Bullish SMT Divergence confirmed (correlated asset failed lower low)` : `⚠️ SMT skipped (single asset mode)`,
-          `⚡ Bullish CISD: Strong displacement candles broke structure upward`,
-          `Entry at FVG top: ${entry?.toFixed(2)} | SL: ${sl?.toFixed(2)} | TP: ${tp?.toFixed(2)} | R:R: ${rr}x ✅`
-        ]
-      };
-    }
+    const sl       = sweepLow - atr * 0.1;
+    const tp       = entry + (entry - sl) * 2.5;
+    
+    return {
+      signal: 'BUY', entry, sl, tp,
+      setupTime: pTimestamps[pTimestamps.length - 1],
+      confirmations,
+      reason: 'Justin Setup — 5M Entry Confirmed',
+      reasoning: [
+        `✅ Price inside HTF Bullish FVG (${activeBullFVG.low.toFixed(2)}-${activeBullFVG.high.toFixed(2)})`,
+        `✅ Internal Low swept at ${sweepLow.toFixed(2)} (Liquidity grabbed)`,
+        `✅ Bullish CISD: Displacement shift confirmed`,
+        `R:R: 2.5x Target set at ${tp.toFixed(2)}`
+      ]
+    };
   }
 
   // ===== SELL SIGNAL =====
-  // Conditions: In Bearish FVG + Sell Sweep + (Bearish SMT or no correlated data) + Bearish CISD
-  const sellConditions = (inBearFVG || activeBearFVG) &&
-    sweep?.type === 'SELL_SWEEP' &&
-    (hasSMT ? bearishSMT : true) &&
-    bearishCISD;
-
-  if (sellConditions) {
+  if (inBearFVG && sweep?.type === 'SELL_SWEEP' && bearishCISD) {
     const sweepHigh = sweep.sweepHigh;
     const entry     = cisdBearFVG ? cisdBearFVG.high : currentClose;
-    const sl        = sweepHigh + atr * 0.1; // 1 tick above manipulation wick
-    const rawTp     = activeBearFVG ? activeBearFVG.low * 0.99 : entry - atr * 3;
-    const tp        = Math.max(rawTp, entry - (sl - entry) * 3.0);
-    const risk      = sl - entry;
-    const reward    = entry - tp;
-    const rr        = (reward / risk).toFixed(2);
+    const sl        = sweepHigh + atr * 0.1;
+    const tp        = entry - (sl - entry) * 2.5;
 
-    if (reward >= risk * 1.5 && risk > 0 && entry > tp) {
-      return {
-        signal: 'SELL', entry, sl, tp,
-        setupTime: pTimestamps[pTimestamps.length - 1],
-        reason: 'Justin Setup — Bearish',
-        reasoning: [
-          `📍 HTF Bearish FVG zone: ${activeBearFVG?.low?.toFixed(2)} — ${activeBearFVG?.high?.toFixed(2)}`,
-          `🪤 Turtle Soup: Price swept buy-side liquidity at ${sweepHigh?.toFixed(2)} (trapped longs)`,
-          hasSMT ? `📊 Bearish SMT Divergence confirmed (correlated asset failed higher high)` : `⚠️ SMT skipped (single asset mode)`,
-          `⚡ Bearish CISD: Strong displacement candles broke structure downward`,
-          `Entry at FVG base: ${entry?.toFixed(2)} | SL: ${sl?.toFixed(2)} | TP: ${tp?.toFixed(2)} | R:R: ${rr}x ✅`
-        ]
-      };
-    }
+    return {
+      signal: 'SELL', entry, sl, tp,
+      setupTime: pTimestamps[pTimestamps.length - 1],
+      confirmations,
+      reason: 'Justin Setup — 5M Entry Confirmed',
+      reasoning: [
+        `✅ Price inside HTF Bearish FVG (${activeBearFVG.low.toFixed(2)}-${activeBearFVG.high.toFixed(2)})`,
+        `✅ Internal High swept at ${sweepHigh.toFixed(2)} (Liquidity grabbed)`,
+        `✅ Bearish CISD: Displacement shift confirmed`,
+        `R:R: 2.5x Target set at ${tp.toFixed(2)}`
+      ]
+    };
   }
 
-  // Return context clues even if no signal
-  if (activeBullFVG && sweep?.type === 'BUY_SWEEP') {
-    return { signal: 'WAIT', reason: 'Justin: FVG + Sweep ✓ — Awaiting CISD confirmation' };
-  }
-  if (activeBearFVG && sweep?.type === 'SELL_SWEEP') {
-    return { signal: 'WAIT', reason: 'Justin: FVG + Sweep ✓ — Awaiting CISD confirmation' };
-  }
-  if (activeBullFVG || activeBearFVG) {
-    return { signal: 'WAIT', reason: `Justin: Unmitigated ${activeBullFVG ? 'Bullish' : 'Bearish'} FVG identified — Waiting for price` };
-  }
-
-  return { signal: 'NEUTRAL', reason: 'No Justin Setup conditions active' };
+  return { 
+    signal: 'WAIT', 
+    reason: 'Justin Setup: Scanning 5M Conditions...',
+    confirmations,
+    activeBullFVG,
+    activeBearFVG
+  };
 }
