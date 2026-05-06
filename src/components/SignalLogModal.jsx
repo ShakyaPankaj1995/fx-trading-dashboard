@@ -172,6 +172,37 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
 
   const stats = useMemo(() => calcStats(filteredLogs), [filteredLogs]);
 
+  const handleExport = () => {
+    if (logs.length === 0) return;
+    const headers = ['Timestamp', 'Symbol', 'Timeframe', 'Strategy', 'Signal', 'Entry', 'SL', 'TP', 'RR', 'Status', 'ClosedAt'];
+    const csvContent = [
+      headers.join(','),
+      ...logs.map(log => [
+        log.timestamp,
+        log.symbol,
+        log.timeframe,
+        log.strategy,
+        log.signal,
+        log.entry,
+        log.sl,
+        log.tp,
+        log.rr,
+        log.status,
+        log.closedAt || ''
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `fx_signals_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="log-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="log-modal animate-fade-in">
@@ -187,15 +218,22 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button 
+              onClick={handleExport}
+              className="btn btn-outline"
+              style={{ fontSize: '0.75rem', padding: '4px 12px' }}
+            >
+              Export CSV
+            </button>
+            <button 
               onClick={async () => {
                 const btn = document.getElementById('scan-btn');
                 if (btn) btn.innerText = 'Scanning...';
                 try {
                   await fetch('/api/cron');
-                  alert('Market Scan Complete! New signals logged.');
+                  alert('Market Scan Complete! New signals logged to Database.');
                   window.location.reload();
                 } catch (e) {
-                  alert('Scan failed. Ensure KV is connected.');
+                  alert('Scan failed. Ensure Upstash Redis is connected.');
                 } finally {
                   if (btn) btn.innerText = 'Scan Market';
                 }
@@ -215,17 +253,18 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
                   signal: 'BUY',
                   entry: 1.0850,
                   sl: 1.0820,
-                  tp: 1.0910
+                  tp: 1.0910,
+                  setupTime: Math.floor(Date.now() / 1000)
                 };
                 addSignal(testSignal);
               }} 
               className="btn btn-outline" 
               style={{ fontSize: '0.75rem', padding: '4px 8px', borderColor: 'var(--buy-green)', color: 'var(--buy-green)' }}
             >
-              + Add Test Setup
+              + Add Test
             </button>
             <button onClick={clearLogs} className="btn btn-outline log-clear-btn">
-              <Trash2 size={13}/> Clear All
+              <Trash2 size={13}/> Clear
             </button>
             <button onClick={onClose} className="log-close-btn"><X size={20}/></button>
           </div>

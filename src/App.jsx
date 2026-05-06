@@ -53,7 +53,7 @@ function AppInner() {
           <div className="chart-header">
             <div className="chart-title">
               <h1 className="chart-symbol">{symbol}</h1>
-              <span className="chart-subtitle">Live Dashboard v1.1.7 (Macro Modal Update)</span>
+              <span className="chart-subtitle">Live Dashboard v1.1.8 (Persistent Database Active)</span>
             </div>
           </div>
 
