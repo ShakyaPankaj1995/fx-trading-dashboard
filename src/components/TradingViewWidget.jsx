@@ -111,8 +111,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
         // Draw Justin FVGs
         if ((justinSignal.allBullishFVGs || justinSignal.allBearishFVGs) && !fvgSeriesRef.current) {
           fvgSeriesRef.current = chart.addCandlestickSeries({
-            upColor: 'rgba(14, 203, 129, 0.15)',
-            downColor: 'rgba(246, 70, 93, 0.15)',
+            upColor: 'rgba(14, 203, 129, 0.4)',
+            downColor: 'rgba(246, 70, 93, 0.4)',
             borderVisible: false,
             wickVisible: false,
             lastValueVisible: false,
@@ -141,7 +141,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
                   close: fvg.low,
                   high: fvg.high,
                   low: fvg.low,
-                  color: isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)'
+                  color: isBull ? 'rgba(14, 203, 129, 0.4)' : 'rgba(246, 70, 93, 0.4)'
                 });
               }
             });

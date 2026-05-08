@@ -209,7 +209,8 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
 
   if (pH.length < 20) return { signal: 'WAIT', reason: 'Insufficient data' };
 
-  const currentClose = pC[pC.length - 1];
+  const currentPrice = pC[pC.length - 1];
+  const currentClose = currentPrice;
 
   // --- Step 1: Detect HTF FVGs ---
   const { bullishFVGs, bearishFVGs } = detectFVGs(pH, pL, pC, pTimestamps);
@@ -261,7 +262,7 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
     return {
       signal: 'BUY', entry, sl, tp,
       setupTime: pTimestamps[pTimestamps.length - 1],
-      confirmations,
+      confirmations, currentPrice,
       reason: 'Justin Setup — 5M Entry Confirmed',
       reasoning: [
         `✅ Price inside HTF Bullish FVG (${activeBullFVG.low.toFixed(2)}-${activeBullFVG.high.toFixed(2)})`,
@@ -284,7 +285,7 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
     return {
       signal: 'SELL', entry, sl, tp,
       setupTime: pTimestamps[pTimestamps.length - 1],
-      confirmations,
+      confirmations, currentPrice,
       reason: 'Justin Setup — 5M Entry Confirmed',
       reasoning: [
         `✅ Price inside HTF Bearish FVG (${activeBearFVG.low.toFixed(2)}-${activeBearFVG.high.toFixed(2)})`,
@@ -300,7 +301,7 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   return { 
     signal: 'WAIT', 
     reason: 'Justin Setup: Scanning 5M Conditions...',
-    confirmations,
+    confirmations, currentPrice,
     activeBullFVG,
     activeBearFVG,
     allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),

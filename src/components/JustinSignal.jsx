@@ -15,7 +15,7 @@ const SMT_PAIRS = {
   'USDJPY': { ticker: 'USDJPY=X', correlatedTicker: null, correlatedName: null },
 };
 
-const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd }) => {
+const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd, htfFVGs, onUpdateFVG }) => {
   const [signalData, setSignalData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,13 +41,11 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       const pair = SMT_PAIRS[symbol] || {};
       const primaryTicker = pair.ticker || `${symbol}=X`;
 
-      // Fetch primary asset
       const res = await fetch(`/api/finance/v8/finance/chart/${primaryTicker}?interval=${yfInterval}&range=${range}`);
       if (!res.ok) throw new Error('Data fetch failed');
       const json = await res.json();
       const primaryData = json.chart.result[0];
 
-      // Fetch correlated asset for SMT
       let correlatedData = null;
       if (pair.correlatedTicker) {
         try {
@@ -65,18 +63,19 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       const analysis = analyzeJustinSetup(primaryData, correlatedData, interval);
       setSignalData(analysis);
 
+      // Report FVG to parent if HTF
+      if (interval !== '5' && onUpdateFVG) {
+        const activeFVG = analysis.activeBullFVG || analysis.activeBearFVG;
+        onUpdateFVG(interval, activeFVG ? { ...activeFVG, type: analysis.activeBullFVG ? 'BULL' : 'BEAR' } : null);
+      }
+
       if (analysis.signal === 'BUY' || analysis.signal === 'SELL') {
         const key = `${symbol}-${interval}-justin-${analysis.signal}-${analysis.entry?.toFixed(2)}`;
         if (lastLoggedRef.current !== key) {
           lastLoggedRef.current = key;
           addSignal({
-            symbol,
-            timeframe: interval,
-            strategy: 'Justin Setup',
-            signal: analysis.signal,
-            entry: analysis.entry,
-            sl: analysis.sl,
-            tp: analysis.tp,
+            symbol, timeframe: interval, strategy: 'Justin Setup',
+            signal: analysis.signal, entry: analysis.entry, sl: analysis.sl, tp: analysis.tp,
             setupTime: analysis.setupTime
           });
         }
@@ -111,6 +110,17 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   const isNeutral = signal === 'NEUTRAL' || signal === 'WAIT';
   const is5m = interval === '5';
 
+  // For 5M, check which HTF FVGs we are in
+  let insideTimeframes = [];
+  if (is5m && htfFVGs) {
+    const currentPrice = signalData.currentPrice; // We might need to ensure this is returned
+    Object.entries(htfFVGs).forEach(([tf, fvg]) => {
+      if (fvg && signalData.currentPrice >= fvg.low && signalData.currentPrice <= fvg.high) {
+        insideTimeframes.push(TIMEFRAME_LABELS[tf]);
+      }
+    });
+  }
+
   return (
     <div className={`chart-signal compact ${signal.toLowerCase()}`} style={{ borderLeft: color ? `4px solid ${color}` : '' }}>
       <div className="signal-left">
@@ -132,7 +142,9 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
         <div style={{ padding: '8px', background: 'rgba(0,0,0,0.1)', borderRadius: '6px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
             {confirmations.inFVG ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
-            <span style={{ opacity: confirmations.inFVG ? 1 : 0.5 }}>Price inside HTF FVG</span>
+            <span style={{ opacity: confirmations.inFVG ? 1 : 0.5 }}>
+              Price inside {insideTimeframes.length > 0 ? insideTimeframes.join('/') : 'HTF'} FVG
+            </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
             {confirmations.sweep ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
