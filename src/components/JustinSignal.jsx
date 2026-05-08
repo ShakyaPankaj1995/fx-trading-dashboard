@@ -5,6 +5,30 @@ import { useSignalLogContext } from '../context/SignalLogContext';
 
 const TIMEFRAME_LABELS = { '240': '4H', '60': '1H', '15': '15M', '5': '5M' };
 
+// Aggregate 60m candles into 4H candles (Yahoo Finance has no native 4H interval)
+function aggregateRawTo4H(data) {
+  const ts = data.timestamp;
+  const q = data.indicators.quote[0];
+  const groups = {};
+  for (let i = 0; i < ts.length; i++) {
+    if (q.open[i] == null || q.high[i] == null || q.low[i] == null || q.close[i] == null) continue;
+    const blockKey = Math.floor(ts[i] / (4 * 3600)) * (4 * 3600);
+    if (!groups[blockKey]) {
+      groups[blockKey] = { time: blockKey, open: q.open[i], high: q.high[i], low: q.low[i], close: q.close[i] };
+    } else {
+      const g = groups[blockKey];
+      g.high = Math.max(g.high, q.high[i]);
+      g.low = Math.min(g.low, q.low[i]);
+      g.close = q.close[i];
+    }
+  }
+  const sorted = Object.values(groups).sort((a, b) => a.time - b.time);
+  return {
+    timestamp: sorted.map(c => c.time),
+    indicators: { quote: [{ open: sorted.map(c => c.open), high: sorted.map(c => c.high), low: sorted.map(c => c.low), close: sorted.map(c => c.close) }] }
+  };
+}
+
 // SMT Correlated pairs: when analyzing NQ, check ES and vice versa
 const SMT_PAIRS = {
   'NASDAQ': { ticker: 'NQ=F', correlatedTicker: 'ES=F', correlatedName: 'S&P500' },
@@ -33,7 +57,7 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       let range = '5d';
       switch (interval) {
         case '240': yfInterval = '60m'; range = '1mo'; break;
-        case '60':  yfInterval = '60m'; range = '1mo'; break;
+        case '60':  yfInterval = '60m'; range = '5d';  break;  // 1H: shorter range
         case '15':  yfInterval = '15m'; range = '5d';  break;
         case '5':   yfInterval = '5m';  range = '5d';  break;
       }
@@ -44,7 +68,12 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       const res = await fetch(`/api/finance/v8/finance/chart/${primaryTicker}?interval=${yfInterval}&range=${range}`);
       if (!res.ok) throw new Error('Data fetch failed');
       const json = await res.json();
-      const primaryData = json.chart.result[0];
+      let primaryData = json.chart.result[0];
+
+      // For 4H: aggregate 60m candles into 4H candles
+      if (interval === '240') {
+        primaryData = aggregateRawTo4H(primaryData);
+      }
 
       let correlatedData = null;
       if (pair.correlatedTicker) {
@@ -52,7 +81,9 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
           const res2 = await fetch(`/api/finance/v8/finance/chart/${pair.correlatedTicker}?interval=${yfInterval}&range=${range}`);
           if (res2.ok) {
             const json2 = await res2.json();
-            correlatedData = json2.chart.result[0];
+            let cd = json2.chart.result[0];
+            if (interval === '240') cd = aggregateRawTo4H(cd);
+            correlatedData = cd;
             setSmtStatus(`SMT: ${pair.correlatedName} ✓`);
           }
         } catch (_) {

@@ -3,10 +3,54 @@ import { createChart } from 'lightweight-charts';
 import { analyzeData, analyzeCRTData } from '../utils/strategy';
 import { analyzeJustinSetup } from '../utils/justinStrategy';
 
+// Aggregate 60m candles into 4H candles
+function aggregateTo4H(candles) {
+  const groups = {};
+  candles.forEach(c => {
+    // Group into 4-hour blocks (0:00, 4:00, 8:00, 12:00, 16:00, 20:00)
+    const blockKey = Math.floor(c.time / (4 * 3600)) * (4 * 3600);
+    if (!groups[blockKey]) {
+      groups[blockKey] = { time: blockKey, open: c.open, high: c.high, low: c.low, close: c.close };
+    } else {
+      const g = groups[blockKey];
+      g.high = Math.max(g.high, c.high);
+      g.low = Math.min(g.low, c.low);
+      g.close = c.close;
+    }
+  });
+  return Object.values(groups).sort((a, b) => a.time - b.time);
+}
+
+// Also aggregate raw Yahoo data for 4H analysis
+function aggregateRawTo4H(data) {
+  const ts = data.timestamp;
+  const q = data.indicators.quote[0];
+  const groups = {};
+  for (let i = 0; i < ts.length; i++) {
+    if (q.open[i] == null || q.high[i] == null || q.low[i] == null || q.close[i] == null) continue;
+    const blockKey = Math.floor(ts[i] / (4 * 3600)) * (4 * 3600);
+    if (!groups[blockKey]) {
+      groups[blockKey] = { time: blockKey, open: q.open[i], high: q.high[i], low: q.low[i], close: q.close[i] };
+    } else {
+      const g = groups[blockKey];
+      g.high = Math.max(g.high, q.high[i]);
+      g.low = Math.min(g.low, q.low[i]);
+      g.close = q.close[i];
+    }
+  }
+  const sorted = Object.values(groups).sort((a, b) => a.time - b.time);
+  // Rebuild into Yahoo-like format for analyzeJustinSetup
+  return {
+    timestamp: sorted.map(c => c.time),
+    indicators: { quote: [{ open: sorted.map(c => c.open), high: sorted.map(c => c.high), low: sorted.map(c => c.low), close: sorted.map(c => c.close) }] }
+  };
+}
+
 const TradingViewWidget = ({ symbol, interval }) => {
   const chartContainerRef = useRef();
   const chartRef = useRef();
-  const fvgSeriesRef = useRef();
+  const fvgDimSeriesRef = useRef();
+  const fvgHighlightSeriesRef = useRef();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -73,11 +117,12 @@ const TradingViewWidget = ({ symbol, interval }) => {
         setLoading(true);
         setError(null);
 
+        // Yahoo Finance intervals: use 60m for both 4H and 1H, then aggregate for 4H
         let yfInterval = '15m';
         let range = '5d';
         switch(interval) {
           case '240': yfInterval = '60m'; range = '1mo'; break;
-          case '60':  yfInterval = '60m'; range = '1mo'; break;
+          case '60':  yfInterval = '60m'; range = '5d';  break;  // 1H: 5d range (not 1mo)
           case '15':  yfInterval = '15m'; range = '5d';  break;
           case '5':   yfInterval = '5m';  range = '5d';  break;
           default:    yfInterval = '15m'; range = '5d';
@@ -93,7 +138,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
         const json = await res.json();
         const data = json.chart.result[0];
 
-        const formattedData = data.timestamp.map((time, i) => ({
+        // Build raw formatted candles
+        let formattedData = data.timestamp.map((time, i) => ({
           time: time,
           open: data.indicators.quote[0].open[i],
           high: data.indicators.quote[0].high[i],
@@ -101,72 +147,94 @@ const TradingViewWidget = ({ symbol, interval }) => {
           close: data.indicators.quote[0].close[i],
         })).filter(d => d.open != null && d.high != null && d.low != null && d.close != null);
 
+        // For 4H: aggregate 60m candles into 4H candles
+        let analysisData = data;
+        if (interval === '240') {
+          formattedData = aggregateTo4H(formattedData);
+          analysisData = aggregateRawTo4H(data);
+        }
+
         if (formattedData.length === 0) throw new Error('No data');
 
         candleSeries.setData(formattedData);
 
-        // 3. Justin Setup Analysis
-        const justinSignal = analyzeJustinSetup(data, null, interval);
+        // 3. Justin Setup Analysis (uses the correct-timeframe data)
+        const justinSignal = analyzeJustinSetup(analysisData, null, interval);
         
-        // Draw Justin FVGs
-        if ((justinSignal.allBullishFVGs || justinSignal.allBearishFVGs) && !fvgSeriesRef.current) {
-          fvgSeriesRef.current = chart.addCandlestickSeries({
-            upColor: 'rgba(14, 203, 129, 0.6)',
-            downColor: 'rgba(246, 70, 93, 0.6)',
-            borderVisible: false,
-            wickVisible: false,
-            lastValueVisible: false,
-            priceLineVisible: false,
-          });
-        }
+        // Draw FVGs with two tiers: highlighted (active) + dimmed (others)
+        const allBull = justinSignal.allBullishFVGs || [];
+        const allBear = justinSignal.allBearishFVGs || [];
+        const activeBull = justinSignal.activeBullFVG;
+        const activeBear = justinSignal.activeBearFVG;
+        const hasFVGs = allBull.length > 0 || allBear.length > 0;
 
-        if (fvgSeriesRef.current) {
-          const fvgData = [];
-          const allBull = justinSignal.allBullishFVGs || [];
-          const allBear = justinSignal.allBearishFVGs || [];
-
-          // For each unmitigated FVG, create a sequence of "boxes" from its start to now
-          const now = formattedData[formattedData.length - 1].time;
-          
-          [...allBull, ...allBear].forEach(fvg => {
-            const isBull = allBull.includes(fvg);
-            const startTime = fvg.time;
-            
-            // Find all points in formattedData from startTime to now
-            formattedData.forEach(d => {
-              if (d.time >= startTime) {
-                fvgData.push({
-                  time: d.time,
-                  open: fvg.high,
-                  close: fvg.low,
-                  high: fvg.high,
-                  low: fvg.low,
-                  color: isBull ? 'rgba(14, 203, 129, 0.6)' : 'rgba(246, 70, 93, 0.6)'
-                });
-              }
+        if (hasFVGs) {
+          // Dimmed series for all other FVGs
+          if (!fvgDimSeriesRef.current) {
+            fvgDimSeriesRef.current = chart.addCandlestickSeries({
+              upColor: 'rgba(14, 203, 129, 0.2)',
+              downColor: 'rgba(246, 70, 93, 0.2)',
+              borderVisible: false, wickVisible: false,
+              lastValueVisible: false, priceLineVisible: false,
             });
-          });
-          
-          // Sort by time (required by lightweight-charts)
-          fvgData.sort((a, b) => a.time - b.time);
-          
-          // Deduplicate: if multiple FVGs overlap at the same time, we'd need multiple series.
-          // For now, let's just show the most recent one at each timestamp or sum them?
-          // Simplest: just show the latest one found.
-          const uniqueFvgData = [];
-          const seenTimes = new Set();
-          for (let i = fvgData.length - 1; i >= 0; i--) {
-            if (!seenTimes.has(fvgData[i].time)) {
-              uniqueFvgData.push(fvgData[i]);
-              seenTimes.add(fvgData[i].time);
-            }
           }
-          fvgSeriesRef.current.setData(uniqueFvgData.sort((a, b) => a.time - b.time));
+          // Highlighted series for the active/card FVG
+          if (!fvgHighlightSeriesRef.current) {
+            fvgHighlightSeriesRef.current = chart.addCandlestickSeries({
+              upColor: 'rgba(14, 203, 129, 0.7)',
+              downColor: 'rgba(246, 70, 93, 0.7)',
+              borderVisible: true, wickVisible: false,
+              lastValueVisible: false, priceLineVisible: false,
+              borderUpColor: 'rgba(14, 203, 129, 0.9)',
+              borderDownColor: 'rgba(246, 70, 93, 0.9)',
+            });
+          }
         }
+
+        // Build FVG box data
+        const isActiveFVG = (fvg) => {
+          if (activeBull && Math.abs(fvg.low - activeBull.low) < 0.0001 && Math.abs(fvg.high - activeBull.high) < 0.0001) return true;
+          if (activeBear && Math.abs(fvg.low - activeBear.low) < 0.0001 && Math.abs(fvg.high - activeBear.high) < 0.0001) return true;
+          return false;
+        };
+
+        const dimData = [];
+        const highlightData = [];
+
+        [...allBull, ...allBear].forEach(fvg => {
+          const isBull = allBull.includes(fvg);
+          const isActive = isActiveFVG(fvg);
+          const startTime = fvg.time;
+
+          formattedData.forEach(d => {
+            if (d.time >= startTime) {
+              const entry = {
+                time: d.time,
+                open: fvg.high, close: fvg.low,
+                high: fvg.high, low: fvg.low,
+                color: isActive
+                  ? (isBull ? 'rgba(14, 203, 129, 0.7)' : 'rgba(246, 70, 93, 0.7)')
+                  : (isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)')
+              };
+              if (isActive) highlightData.push(entry);
+              else dimData.push(entry);
+            }
+          });
+        });
+
+        // Deduplicate by time (keep latest per timestamp)
+        const dedup = (arr) => {
+          const map = new Map();
+          arr.forEach(d => map.set(d.time, d));
+          return [...map.values()].sort((a, b) => a.time - b.time);
+        };
+
+        if (fvgDimSeriesRef.current) fvgDimSeriesRef.current.setData(dedup(dimData));
+        if (fvgHighlightSeriesRef.current) fvgHighlightSeriesRef.current.setData(dedup(highlightData));
 
         // Analysis for Trendline / CRT / Justin
-        const trendSignal = analyzeData(data, interval);
-        const crtSignal = analyzeCRTData(data, interval);
+        const trendSignal = analyzeData(analysisData, interval);
+        const crtSignal = analyzeCRTData(analysisData, interval);
         
         const activeSignal = (justinSignal.signal === 'BUY' || justinSignal.signal === 'SELL') ? justinSignal :
                              (crtSignal.signal === 'BUY' || crtSignal.signal === 'SELL') ? crtSignal : 
@@ -227,7 +295,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
     return () => {
       resizeObserver.disconnect();
       chart.remove();
-      fvgSeriesRef.current = null;
+      fvgDimSeriesRef.current = null;
+      fvgHighlightSeriesRef.current = null;
     };
   }, [symbol, interval]);
 
