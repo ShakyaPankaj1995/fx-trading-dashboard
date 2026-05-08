@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, memo, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import { analyzeData, analyzeCRTData } from '../utils/strategy';
+import { analyzeJustinSetup } from '../utils/justinStrategy';
 
 const TradingViewWidget = ({ symbol, interval }) => {
   const chartContainerRef = useRef();
   const chartRef = useRef();
+  const fvgSeriesRef = useRef();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -103,10 +105,71 @@ const TradingViewWidget = ({ symbol, interval }) => {
 
         candleSeries.setData(formattedData);
 
-        // Analysis
+        // 3. Justin Setup Analysis
+        const justinSignal = analyzeJustinSetup(data, null, interval);
+        
+        // Draw Justin FVGs
+        if ((justinSignal.allBullishFVGs || justinSignal.allBearishFVGs) && !fvgSeriesRef.current) {
+          fvgSeriesRef.current = chart.addCandlestickSeries({
+            upColor: 'rgba(14, 203, 129, 0.15)',
+            downColor: 'rgba(246, 70, 93, 0.15)',
+            borderVisible: false,
+            wickVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+        }
+
+        if (fvgSeriesRef.current) {
+          const fvgData = [];
+          const allBull = justinSignal.allBullishFVGs || [];
+          const allBear = justinSignal.allBearishFVGs || [];
+
+          // For each unmitigated FVG, create a sequence of "boxes" from its start to now
+          const now = formattedData[formattedData.length - 1].time;
+          
+          [...allBull, ...allBear].forEach(fvg => {
+            const isBull = allBull.includes(fvg);
+            const startTime = fvg.time;
+            
+            // Find all points in formattedData from startTime to now
+            formattedData.forEach(d => {
+              if (d.time >= startTime) {
+                fvgData.push({
+                  time: d.time,
+                  open: fvg.high,
+                  close: fvg.low,
+                  high: fvg.high,
+                  low: fvg.low,
+                  color: isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)'
+                });
+              }
+            });
+          });
+          
+          // Sort by time (required by lightweight-charts)
+          fvgData.sort((a, b) => a.time - b.time);
+          
+          // Deduplicate: if multiple FVGs overlap at the same time, we'd need multiple series.
+          // For now, let's just show the most recent one at each timestamp or sum them?
+          // Simplest: just show the latest one found.
+          const uniqueFvgData = [];
+          const seenTimes = new Set();
+          for (let i = fvgData.length - 1; i >= 0; i--) {
+            if (!seenTimes.has(fvgData[i].time)) {
+              uniqueFvgData.push(fvgData[i]);
+              seenTimes.add(fvgData[i].time);
+            }
+          }
+          fvgSeriesRef.current.setData(uniqueFvgData.sort((a, b) => a.time - b.time));
+        }
+
+        // Analysis for Trendline / CRT / Justin
         const trendSignal = analyzeData(data, interval);
         const crtSignal = analyzeCRTData(data, interval);
-        const activeSignal = (crtSignal.signal === 'BUY' || crtSignal.signal === 'SELL') ? crtSignal : 
+        
+        const activeSignal = (justinSignal.signal === 'BUY' || justinSignal.signal === 'SELL') ? justinSignal :
+                             (crtSignal.signal === 'BUY' || crtSignal.signal === 'SELL') ? crtSignal : 
                              (trendSignal.signal === 'BUY' || trendSignal.signal === 'SELL') ? trendSignal : null;
 
         if (activeSignal && activeSignal.setupTime) {
@@ -120,7 +183,6 @@ const TradingViewWidget = ({ symbol, interval }) => {
              });
           }
 
-          // Generate data for boxes - ensure we have at least 2 points
           const startTime = Math.max(activeSignal.setupTime, formattedData[0].time);
           const points = formattedData.filter(d => d.time >= startTime);
           
@@ -133,7 +195,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
           }
 
           // Price Lines
-          candleSeries.createPriceLine({ price: activeSignal.entry, color: '#3b82f6', lineWidth: 2, title: 'ENTRY' });
+          const title = activeSignal === justinSignal ? 'JUSTIN' : activeSignal === crtSignal ? 'CRT' : 'TREND';
+          candleSeries.createPriceLine({ price: activeSignal.entry, color: '#3b82f6', lineWidth: 2, title: `${title} ENTRY` });
           candleSeries.createPriceLine({ price: activeSignal.tp, color: '#0ecb81', lineWidth: 1, lineStyle: 2, title: 'TARGET' });
           candleSeries.createPriceLine({ price: activeSignal.sl, color: '#f6465d', lineWidth: 1, lineStyle: 2, title: 'STOP' });
         }
@@ -164,6 +227,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
     return () => {
       resizeObserver.disconnect();
       chart.remove();
+      fvgSeriesRef.current = null;
     };
   }, [symbol, interval]);
 

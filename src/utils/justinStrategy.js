@@ -14,7 +14,7 @@
  * FVG: Gap between candle[i-2].high and candle[i].low (bullish)
  *      or candle[i-2].low and candle[i].high (bearish)
  */
-function detectFVGs(highs, lows, closes) {
+function detectFVGs(highs, lows, closes, timestamps) {
   const bullishFVGs = [];
   const bearishFVGs = [];
 
@@ -32,6 +32,7 @@ function detectFVGs(highs, lows, closes) {
         high: currLow,
         midCandle,
         index: i,
+        time: timestamps[i-1], // Use the middle candle's timestamp
         mitigated: false,
       });
     }
@@ -43,6 +44,7 @@ function detectFVGs(highs, lows, closes) {
         high: prevLow,
         midCandle,
         index: i,
+        time: timestamps[i-1],
         mitigated: false,
       });
     }
@@ -210,7 +212,7 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   const currentClose = pC[pC.length - 1];
 
   // --- Step 1: Detect HTF FVGs ---
-  const { bullishFVGs, bearishFVGs } = detectFVGs(pH, pL, pC);
+  const { bullishFVGs, bearishFVGs } = detectFVGs(pH, pL, pC, pTimestamps);
 
   // Find the most recent unmitigated FVGs
   const activeBullFVG = [...bullishFVGs].reverse().find(f => !f.mitigated);
@@ -266,7 +268,9 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
         `✅ Internal Low swept at ${sweepLow.toFixed(2)} (Liquidity grabbed)`,
         `✅ Bullish CISD: Displacement shift confirmed`,
         `R:R: 2.5x Target set at ${tp.toFixed(2)}`
-      ]
+      ],
+      allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
+      allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
     };
   }
 
@@ -287,7 +291,9 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
         `✅ Internal High swept at ${sweepHigh.toFixed(2)} (Liquidity grabbed)`,
         `✅ Bearish CISD: Displacement shift confirmed`,
         `R:R: 2.5x Target set at ${tp.toFixed(2)}`
-      ]
+      ],
+      allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
+      allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
     };
   }
 
@@ -296,6 +302,8 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
     reason: 'Justin Setup: Scanning 5M Conditions...',
     confirmations,
     activeBullFVG,
-    activeBearFVG
+    activeBearFVG,
+    allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
+    allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
   };
 }
