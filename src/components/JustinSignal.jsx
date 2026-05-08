@@ -46,9 +46,16 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   const [smtStatus, setSmtStatus] = useState(null);
   const { addSignal } = useSignalLogContext();
   const lastLoggedRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const fetchAndAnalyze = async () => {
-    setLoading(true);
+    // Don't clear existing data during refresh — keep last state visible
+    if (!signalData) setLoading(true);
     setError(null);
     onLoadStart?.();
 
@@ -92,6 +99,8 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       }
 
       const analysis = analyzeJustinSetup(primaryData, correlatedData, interval);
+      
+      if (!isMountedRef.current) return; // Don't update if unmounted
       setSignalData(analysis);
 
       // Report FVG to parent if HTF
@@ -113,7 +122,7 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       }
     } catch (err) {
       console.error(err);
-      setError('Signal data unavailable');
+      if (!signalData) setError('Signal data unavailable');
     } finally {
       setLoading(false);
       onLoadEnd?.();

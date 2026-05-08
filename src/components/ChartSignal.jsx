@@ -11,9 +11,16 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
   const [error, setError] = useState(null);
   const { addSignal } = useSignalLogContext();
   const lastLoggedSignalRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const fetchAndAnalyze = async () => {
-    setLoading(true);
+    // Don't clear existing data during refresh — keep last state visible
+    if (!signalData) setLoading(true);
     setError(null);
     onLoadStart?.();
     try {
@@ -22,7 +29,7 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
       
       switch(interval) {
         case '240': yfInterval = '60m'; range = '1mo'; break;
-        case '60':  yfInterval = '60m'; range = '1mo'; break;
+        case '60':  yfInterval = '60m'; range = '5d';  break;
         case '15':  yfInterval = '15m'; range = '5d';  break;
         case '5':   yfInterval = '5m';  range = '5d';  break;
         default:    yfInterval = '15m'; range = '5d';
@@ -41,10 +48,11 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
       const analysis = strategyType === 'crt' 
         ? analyzeCRTData(chartData, interval)
         : analyzeData(chartData, interval);
-        
+      
+      if (!isMountedRef.current) return; // Don't update if unmounted
       setSignalData(analysis);
 
-      // Log actionable signals
+      // Log actionable signals (dedup uses addSignal's internal checks)
       if (analysis.signal === 'BUY' || analysis.signal === 'SELL') {
         const logKey = `${symbol}-${interval}-${strategyType}-${analysis.signal}-${analysis.entry?.toFixed(5)}`;
         if (lastLoggedSignalRef.current !== logKey) {
@@ -63,7 +71,7 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
       }
     } catch (err) {
       console.error(err);
-      setError('Signal data unavailable');
+      if (!signalData) setError('Signal data unavailable'); // Only show error if no prior data
     } finally {
       setLoading(false);
       onLoadEnd?.();
