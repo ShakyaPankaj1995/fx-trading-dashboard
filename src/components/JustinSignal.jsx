@@ -141,8 +141,8 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       {is5m && confirmations && (
         <div style={{ padding: '8px', background: 'rgba(0,0,0,0.1)', borderRadius: '6px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
-            {confirmations.inFVG ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
-            <span style={{ opacity: confirmations.inFVG ? 1 : 0.5 }}>
+            {(confirmations.inFVG || insideTimeframes.length > 0) ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
+            <span style={{ opacity: (confirmations.inFVG || insideTimeframes.length > 0) ? 1 : 0.5 }}>
               Price inside {insideTimeframes.length > 0 ? insideTimeframes.join('/') : 'HTF'} FVG
             </span>
           </div>
