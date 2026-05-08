@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const STORAGE_KEY = 'fx_signal_log_v3';
 
@@ -10,6 +10,7 @@ export function useSignalLog() {
       return local ? JSON.parse(local) : [];
     } catch (e) { return []; }
   });
+  const outcomeCheckRef = useRef(null);
 
   // Sync state to LocalStorage whenever it changes
   useEffect(() => {
@@ -23,11 +24,9 @@ export function useSignalLog() {
         const serverData = await res.json();
         if (Array.isArray(serverData)) {
           setLogs(prev => {
-            // Merge: Keep local, add new from server if ID doesn't exist
             const localIds = new Set(prev.map(l => l.id));
             const newFromServer = serverData.filter(sl => !localIds.has(sl.id));
             if (newFromServer.length === 0) {
-              // Also update status of existing logs if server has newer info
               return prev.map(pl => {
                 const updated = serverData.find(sl => sl.id === pl.id);
                 return (updated && updated.status !== pl.status) ? updated : pl;
@@ -54,16 +53,28 @@ export function useSignalLog() {
 
   const addSignal = useCallback(async (signal) => {
     setLogs(prev => {
-      const tenMinsAgo = Date.now() - 10 * 60 * 1000;
-      const isDuplicate = prev.some(log =>
+      // --- Stronger Dedup ---
+      // 1. Don't log if an ACTIVE trade exists for the same symbol+timeframe+strategy+direction
+      const hasActiveMatch = prev.some(log =>
         log.symbol === signal.symbol &&
         log.timeframe === signal.timeframe &&
         log.strategy === signal.strategy &&
         log.signal === signal.signal &&
-        log.status === 'ACTIVE' &&
-        new Date(log.timestamp).getTime() > tenMinsAgo
+        log.status === 'ACTIVE'
       );
-      if (isDuplicate) return prev;
+      if (hasActiveMatch) return prev;
+
+      // 2. Don't log if a trade with same entry price existed in the last 2 hours
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+      const recentDuplicate = prev.some(log =>
+        log.symbol === signal.symbol &&
+        log.timeframe === signal.timeframe &&
+        log.strategy === signal.strategy &&
+        log.signal === signal.signal &&
+        Math.abs(Number(log.entry) - Number(signal.entry)) < 0.0001 &&
+        new Date(log.timestamp).getTime() > twoHoursAgo
+      );
+      if (recentDuplicate) return prev;
 
       const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(signal.symbol);
       const rr = signal.signal === 'BUY'
@@ -83,6 +94,7 @@ export function useSignalLog() {
         rr,
         status: 'ACTIVE',
         closedAt: null,
+        closePrice: null,
       };
 
       const updated = [newLog, ...prev].slice(0, 500);
@@ -90,6 +102,78 @@ export function useSignalLog() {
       return updated;
     });
   }, []);
+
+  // --- Automatic Trade Outcome Resolution ---
+  const checkTradeOutcomes = useCallback(async () => {
+    const activeTrades = logs.filter(l => l.status === 'ACTIVE');
+    if (activeTrades.length === 0) return;
+
+    // Fetch current prices for all active symbols
+    const symbols = [...new Set(activeTrades.map(l => l.symbol))];
+    const priceMap = {};
+
+    for (const sym of symbols) {
+      try {
+        let ticker = {
+          'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X', 'USDJPY': 'USDJPY=X',
+          'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F'
+        }[sym] || `${sym}=X`;
+
+        const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=5m&range=1d`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const result = data.chart.result[0];
+        const highs = result.indicators.quote[0].high.filter(h => h != null);
+        const lows = result.indicators.quote[0].low.filter(l => l != null);
+        const currentPrice = result.meta.regularMarketPrice;
+
+        priceMap[sym] = {
+          current: currentPrice,
+          dayHigh: Math.max(...highs),
+          dayLow: Math.min(...lows)
+        };
+      } catch (_) {}
+    }
+
+    let changed = false;
+    setLogs(prev => {
+      const updated = prev.map(log => {
+        if (log.status !== 'ACTIVE') return log;
+        const priceInfo = priceMap[log.symbol];
+        if (!priceInfo) return log;
+
+        const { current, dayHigh, dayLow } = priceInfo;
+        const logTime = new Date(log.timestamp).getTime();
+
+        if (log.signal === 'BUY') {
+          // TP hit: price went above TP
+          if (dayHigh >= log.tp) {
+            changed = true;
+            return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString(), closePrice: log.tp };
+          }
+          // SL hit: price went below SL
+          if (dayLow <= log.sl) {
+            changed = true;
+            return { ...log, status: 'FAILED', closedAt: new Date().toISOString(), closePrice: log.sl };
+          }
+        } else if (log.signal === 'SELL') {
+          // TP hit: price went below TP
+          if (dayLow <= log.tp) {
+            changed = true;
+            return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString(), closePrice: log.tp };
+          }
+          // SL hit: price went above SL
+          if (dayHigh >= log.sl) {
+            changed = true;
+            return { ...log, status: 'FAILED', closedAt: new Date().toISOString(), closePrice: log.sl };
+          }
+        }
+        return log;
+      });
+      if (changed) syncToServer(updated);
+      return changed ? updated : prev;
+    });
+  }, [logs]);
 
   const removeSignal = useCallback(async (id) => {
     setLogs(prev => {
@@ -114,6 +198,13 @@ export function useSignalLog() {
     const interval = setInterval(fetchLogs, 30000);
     return () => clearInterval(interval);
   }, [fetchLogs]);
+
+  // Check trade outcomes every 30 seconds
+  useEffect(() => {
+    checkTradeOutcomes();
+    outcomeCheckRef.current = setInterval(checkTradeOutcomes, 30000);
+    return () => clearInterval(outcomeCheckRef.current);
+  }, [checkTradeOutcomes]);
 
   return { logs, addSignal, removeSignal, clearLogs };
 }

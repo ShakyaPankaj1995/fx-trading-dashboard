@@ -5,9 +5,10 @@ import { useSignalLogContext } from '../context/SignalLogContext';
 const TIMEFRAME_LABELS = { '240': '4H', '60': '1H', '15': '15M', '5': '5M' };
 
 const TABS = [
-  { key: 'all',        label: 'All Signals',          icon: <LayoutList size={14}/> },
-  { key: 'Trendline',  label: 'Trendline Strategy',   icon: <Activity size={14}/> },
-  { key: 'CRT (AMD)',  label: 'CRT (AMD) Strategy',   icon: <Crosshair size={14}/> },
+  { key: 'all',            label: 'All Signals',          icon: <LayoutList size={14}/> },
+  { key: 'Trendline',      label: 'Trendline Strategy',   icon: <Activity size={14}/> },
+  { key: 'CRT (AMD)',      label: 'CRT (AMD) Strategy',   icon: <Crosshair size={14}/> },
+  { key: 'Justin Setup',   label: 'Justin Setup',         icon: <Crosshair size={14}/> },
 ];
 
 const StatusBadge = ({ status }) => {
@@ -83,10 +84,11 @@ const LogTable = ({ logs, onSelectSymbol }) => {
   };
 
   const calcPnL = (log) => {
-    if (log.status !== 'ACTIVE') {
-      const diff = log.signal === 'BUY' ? (log.tp - log.entry) : (log.entry - log.tp);
-      return log.status === 'SUCCESS' ? diff : -Math.abs(log.entry - log.sl);
+    if (log.status === 'SUCCESS' || log.status === 'FAILED') {
+      const cp = log.closePrice || (log.status === 'SUCCESS' ? log.tp : log.sl);
+      return log.signal === 'BUY' ? (cp - log.entry) : (log.entry - cp);
     }
+    // Active trade: use live price
     const current = prices[log.symbol];
     if (!current) return null;
     return log.signal === 'BUY' ? (current - log.entry) : (log.entry - current);
@@ -113,6 +115,7 @@ const LogTable = ({ logs, onSelectSymbol }) => {
           <th>Strategy</th>
           <th>Signal</th>
           <th>Entry</th>
+          <th>Close</th>
           <th>PnL</th>
           <th>Status</th>
           <th>Actions</th>
@@ -132,6 +135,17 @@ const LogTable = ({ logs, onSelectSymbol }) => {
 
           const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=${log.timeframe}`;
 
+          // Determine close info
+          const closePriceDisplay = log.closePrice 
+            ? Number(log.closePrice).toFixed(isForex ? 5 : 2)
+            : log.status === 'ACTIVE' 
+              ? (prices[log.symbol] ? Number(prices[log.symbol]).toFixed(isForex ? 5 : 2) : '—')
+              : '—';
+          
+          const closedAtDisplay = log.closedAt 
+            ? new Date(log.closedAt).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+            : '';
+
           return (
           <tr key={log.id} className={`log-row log-row-${log.status.toLowerCase()}`}>
             <td className="log-cell-time">{formatDate(log.timestamp)}</td>
@@ -145,6 +159,18 @@ const LogTable = ({ logs, onSelectSymbol }) => {
               </span>
             </td>
             <td className="log-cell-mono">{Number(log.entry).toFixed(isForex ? 5 : 2)}</td>
+            <td className="log-cell-mono" style={{ fontSize: '0.7rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                <span style={{ 
+                  color: log.status === 'SUCCESS' ? 'var(--buy-green)' : log.status === 'FAILED' ? 'var(--sell-red)' : 'var(--text-secondary)' 
+                }}>
+                  {closePriceDisplay}
+                </span>
+                {closedAtDisplay && (
+                  <span style={{ fontSize: '0.6rem', opacity: 0.5 }}>{closedAtDisplay}</span>
+                )}
+              </div>
+            </td>
             <td className={`log-cell-mono ${pnl > 0 ? 'log-pnl-up' : pnl < 0 ? 'log-pnl-down' : ''}`} style={{ fontWeight: 700 }}>
               {pnl > 0 ? '+' : ''}{pnlFormatted}
             </td>
