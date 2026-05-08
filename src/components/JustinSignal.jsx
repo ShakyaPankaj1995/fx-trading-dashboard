@@ -113,10 +113,15 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   // For 5M, check which HTF FVGs we are in
   let insideTimeframes = [];
   if (is5m && htfFVGs) {
-    const currentPrice = signalData.currentPrice; // We might need to ensure this is returned
+    const cp = signalData.currentPrice;
     Object.entries(htfFVGs).forEach(([tf, fvg]) => {
-      if (fvg && signalData.currentPrice >= fvg.low && signalData.currentPrice <= fvg.high) {
-        insideTimeframes.push(TIMEFRAME_LABELS[tf]);
+      if (fvg && cp >= fvg.low && cp <= fvg.high) {
+        insideTimeframes.push({
+          label: TIMEFRAME_LABELS[tf] || tf,
+          type: fvg.type,
+          low: fvg.low?.toFixed(5),
+          high: fvg.high?.toFixed(5)
+        });
       }
     });
   }
@@ -139,13 +144,24 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       </div>
 
       {is5m && confirmations && (
-        <div style={{ padding: '8px', background: 'rgba(0,0,0,0.1)', borderRadius: '6px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ padding: '8px', background: 'rgba(0,0,0,0.15)', borderRadius: '6px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
             {(confirmations.inFVG || insideTimeframes.length > 0) ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
             <span style={{ opacity: (confirmations.inFVG || insideTimeframes.length > 0) ? 1 : 0.5 }}>
-              Price inside {insideTimeframes.length > 0 ? insideTimeframes.join('/') : 'HTF'} FVG
+              {insideTimeframes.length > 0 
+                ? `Price inside ${insideTimeframes.map(t => t.label).join(' + ')} FVG`
+                : 'Price inside HTF FVG'}
             </span>
           </div>
+          {insideTimeframes.length > 0 && (
+            <div style={{ marginLeft: '24px', fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {insideTimeframes.map((t, i) => (
+                <span key={i} style={{ color: t.type === 'BULL' ? 'var(--buy-green)' : 'var(--sell-red)' }}>
+                  {t.label}: {t.type === 'BULL' ? '▲ Bullish' : '▼ Bearish'} ({t.low} – {t.high})
+                </span>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
             {confirmations.sweep ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
             <span style={{ opacity: confirmations.sweep ? 1 : 0.5 }}>Internal Liquidity Sweep</span>

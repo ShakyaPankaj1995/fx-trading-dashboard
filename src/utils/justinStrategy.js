@@ -221,9 +221,16 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
 
   // HTF Confirmation (for 4H, 1H, 15M)
   if (intervalStr !== '5') {
-    if (activeBullFVG) return { signal: 'WAIT', reason: 'Bullish FVG Identified (Unmitigated)', color: 'var(--buy-green)' };
-    if (activeBearFVG) return { signal: 'WAIT', reason: 'Bearish FVG Identified (Unmitigated)', color: 'var(--sell-red)' };
-    return { signal: 'NEUTRAL', reason: 'No unmitigated HTF FVGs found' };
+    const htfBase = {
+      activeBullFVG,
+      activeBearFVG,
+      currentPrice,
+      allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
+      allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
+    };
+    if (activeBullFVG) return { ...htfBase, signal: 'WAIT', reason: 'Bullish FVG Identified (Unmitigated)', color: 'var(--buy-green)' };
+    if (activeBearFVG) return { ...htfBase, signal: 'WAIT', reason: 'Bearish FVG Identified (Unmitigated)', color: 'var(--sell-red)' };
+    return { ...htfBase, signal: 'NEUTRAL', reason: 'No unmitigated HTF FVGs found' };
   }
 
   // --- 5M Entry Logic ---
