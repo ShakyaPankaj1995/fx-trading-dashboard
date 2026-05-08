@@ -244,9 +244,9 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
 
   const stats = useMemo(() => calcStats(filteredLogs), [filteredLogs]);
 
-  const handleExport = () => {
+   const handleExport = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Symbol', 'Timeframe', 'Strategy', 'Signal', 'Entry', 'SL', 'TP', 'RR', 'Status', 'ClosedAt'];
+    const headers = ['Detected', 'Symbol', 'Timeframe', 'Strategy', 'Signal', 'Entry', 'SL', 'TP', 'RR', 'Status', 'ClosePrice', 'ClosedAt'];
     const csvContent = [
       headers.join(','),
       ...logs.map(log => [
@@ -260,6 +260,7 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
         log.tp,
         log.rr,
         log.status,
+        log.closePrice || '',
         log.closedAt || ''
       ].join(','))
     ].join('\n');

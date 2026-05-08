@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 const STORAGE_KEY = 'fx_signal_log_v3';
 
 export function useSignalLog() {
-  // 1. Initialize from LocalStorage immediately
   const [logs, setLogs] = useState(() => {
     try {
       const local = localStorage.getItem(STORAGE_KEY);
@@ -11,9 +10,8 @@ export function useSignalLog() {
     } catch (e) { return []; }
   });
   const outcomeTimerRef = useRef(null);
-  const logsRef = useRef(logs); // Stable ref to avoid stale closures
+  const logsRef = useRef(logs);
 
-  // Keep logsRef in sync without causing re-renders
   useEffect(() => {
     logsRef.current = logs;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
@@ -30,7 +28,6 @@ export function useSignalLog() {
             const localIds = new Set(prev.map(l => l.id));
             const newFromServer = serverData.filter(sl => !localIds.has(sl.id));
             if (newFromServer.length === 0) {
-              // Update status if server has newer info
               let changed = false;
               const merged = prev.map(pl => {
                 const updated = serverData.find(sl => sl.id === pl.id);
@@ -64,7 +61,7 @@ export function useSignalLog() {
   // --- Add Signal with strong dedup ---
   const addSignal = useCallback((signal) => {
     setLogs(prev => {
-      // 1. Don't log if an ACTIVE trade exists for the same symbol+timeframe+strategy+direction
+      // 1. Don't log if an ACTIVE trade exists for same symbol+timeframe+strategy+direction
       const hasActiveMatch = prev.some(log =>
         log.symbol === signal.symbol &&
         log.timeframe === signal.timeframe &&
@@ -74,7 +71,7 @@ export function useSignalLog() {
       );
       if (hasActiveMatch) return prev;
 
-      // 2. Don't log if a trade with very similar entry price existed recently (2 hours)
+      // 2. Don't log if a trade with very similar entry existed recently (2 hours)
       const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
       const recentDuplicate = prev.some(log =>
         log.symbol === signal.symbol &&
@@ -91,16 +88,18 @@ export function useSignalLog() {
       const slVal = Number(signal.sl);
       const tpVal = Number(signal.tp);
 
-      // Safety: skip invalid signals
       if (!entryVal || !slVal || !tpVal || isNaN(entryVal)) return prev;
 
       const rr = signal.signal === 'BUY'
         ? ((tpVal - entryVal) / Math.abs(entryVal - slVal)).toFixed(2)
         : ((entryVal - tpVal) / Math.abs(slVal - entryVal)).toFixed(2);
 
+      // ALWAYS use current time as the log timestamp (not the candle timestamp)
+      // The candle timestamp (setupTime) is stored separately for reference
       const newLog = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        timestamp: signal.setupTime ? new Date(signal.setupTime * 1000).toISOString() : new Date().toISOString(),
+        timestamp: new Date().toISOString(),  // When signal was DETECTED (always now)
+        setupTime: signal.setupTime ? new Date(signal.setupTime * 1000).toISOString() : null,
         symbol: signal.symbol,
         timeframe: signal.timeframe,
         strategy: signal.strategy,
@@ -114,7 +113,7 @@ export function useSignalLog() {
         closePrice: null,
       };
 
-      console.log('[SignalLog] New trade logged:', newLog.symbol, newLog.signal, newLog.entry);
+      console.log('[SignalLog] New trade logged:', newLog.symbol, newLog.signal, newLog.entry, 'at', newLog.timestamp);
       const updated = [newLog, ...prev].slice(0, 500);
       syncToServer(updated);
       return updated;
@@ -122,13 +121,17 @@ export function useSignalLog() {
   }, [syncToServer]);
 
   // --- Automatic Trade Outcome Resolution ---
-  // Uses logsRef instead of logs dependency to avoid infinite loops
   const checkTradeOutcomes = useCallback(async () => {
     const currentLogs = logsRef.current;
     const activeTrades = currentLogs.filter(l => l.status === 'ACTIVE');
     if (activeTrades.length === 0) return;
 
-    const symbols = [...new Set(activeTrades.map(l => l.symbol))];
+    // Don't check trades that are less than 5 minutes old (let them breathe)
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const matureTrades = activeTrades.filter(l => new Date(l.timestamp).getTime() < fiveMinutesAgo);
+    if (matureTrades.length === 0) return;
+
+    const symbols = [...new Set(matureTrades.map(l => l.symbol))];
     const priceMap = {};
 
     for (const sym of symbols) {
@@ -138,18 +141,16 @@ export function useSignalLog() {
           'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F'
         }[sym] || `${sym}=X`;
 
+        // Fetch 5m candles for the day so we can check timestamps
         const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=5m&range=1d`);
         if (!res.ok) continue;
         const data = await res.json();
         const result = data.chart.result[0];
-        const highs = result.indicators.quote[0].high.filter(h => h != null);
-        const lows = result.indicators.quote[0].low.filter(l => l != null);
+        const timestamps = result.timestamp || [];
+        const highs = result.indicators.quote[0].high;
+        const lows = result.indicators.quote[0].low;
 
-        priceMap[sym] = {
-          current: result.meta.regularMarketPrice,
-          dayHigh: Math.max(...highs),
-          dayLow: Math.min(...lows)
-        };
+        priceMap[sym] = { timestamps, highs, lows, current: result.meta.regularMarketPrice };
       } catch (_) {}
     }
 
@@ -159,31 +160,52 @@ export function useSignalLog() {
       let changed = false;
       const updated = prev.map(log => {
         if (log.status !== 'ACTIVE') return log;
+        
+        // Skip trades less than 5 minutes old
+        const logCreatedAt = new Date(log.timestamp).getTime();
+        if (logCreatedAt > fiveMinutesAgo) return log;
+
         const priceInfo = priceMap[log.symbol];
         if (!priceInfo) return log;
 
-        const { dayHigh, dayLow } = priceInfo;
+        // Only check candles AFTER the trade was created
+        const logCreatedSec = Math.floor(logCreatedAt / 1000);
+        let highAfterEntry = -Infinity;
+        let lowAfterEntry = Infinity;
+
+        for (let i = 0; i < priceInfo.timestamps.length; i++) {
+          if (priceInfo.timestamps[i] >= logCreatedSec && priceInfo.highs[i] != null && priceInfo.lows[i] != null) {
+            highAfterEntry = Math.max(highAfterEntry, priceInfo.highs[i]);
+            lowAfterEntry = Math.min(lowAfterEntry, priceInfo.lows[i]);
+          }
+        }
+
+        // If no candles found after entry, use current price as a simple check
+        if (highAfterEntry === -Infinity) {
+          highAfterEntry = priceInfo.current;
+          lowAfterEntry = priceInfo.current;
+        }
 
         if (log.signal === 'BUY') {
-          if (dayHigh >= log.tp) {
+          if (highAfterEntry >= log.tp) {
             changed = true;
-            console.log('[SignalLog] ✅ Trade HIT TP:', log.symbol, log.signal, log.entry, '→', log.tp);
+            console.log('[SignalLog] ✅ BUY HIT TP:', log.symbol, log.entry, '→', log.tp);
             return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString(), closePrice: log.tp };
           }
-          if (dayLow <= log.sl) {
+          if (lowAfterEntry <= log.sl) {
             changed = true;
-            console.log('[SignalLog] ❌ Trade HIT SL:', log.symbol, log.signal, log.entry, '→', log.sl);
+            console.log('[SignalLog] ❌ BUY HIT SL:', log.symbol, log.entry, '→', log.sl);
             return { ...log, status: 'FAILED', closedAt: new Date().toISOString(), closePrice: log.sl };
           }
         } else if (log.signal === 'SELL') {
-          if (dayLow <= log.tp) {
+          if (lowAfterEntry <= log.tp) {
             changed = true;
-            console.log('[SignalLog] ✅ Trade HIT TP:', log.symbol, log.signal, log.entry, '→', log.tp);
+            console.log('[SignalLog] ✅ SELL HIT TP:', log.symbol, log.entry, '→', log.tp);
             return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString(), closePrice: log.tp };
           }
-          if (dayHigh >= log.sl) {
+          if (highAfterEntry >= log.sl) {
             changed = true;
-            console.log('[SignalLog] ❌ Trade HIT SL:', log.symbol, log.signal, log.entry, '→', log.sl);
+            console.log('[SignalLog] ❌ SELL HIT SL:', log.symbol, log.entry, '→', log.sl);
             return { ...log, status: 'FAILED', closedAt: new Date().toISOString(), closePrice: log.sl };
           }
         }
@@ -193,9 +215,9 @@ export function useSignalLog() {
         syncToServer(updated);
         return updated;
       }
-      return prev; // No change, don't trigger re-render
+      return prev;
     });
-  }, [syncToServer]); // Only depends on syncToServer (stable), NOT on logs
+  }, [syncToServer]);
 
   const removeSignal = useCallback((id) => {
     setLogs(prev => {
@@ -215,17 +237,14 @@ export function useSignalLog() {
     }
   }, []);
 
-  // Server sync on mount + interval
   useEffect(() => {
     fetchLogs();
     const interval = setInterval(fetchLogs, 30000);
     return () => clearInterval(interval);
   }, [fetchLogs]);
 
-  // Outcome check on mount + interval (no dependency on logs → no infinite loop)
   useEffect(() => {
-    // Delay first check to let app stabilize
-    const initTimer = setTimeout(checkTradeOutcomes, 5000);
+    const initTimer = setTimeout(checkTradeOutcomes, 10000);
     outcomeTimerRef.current = setInterval(checkTradeOutcomes, 45000);
     return () => {
       clearTimeout(initTimer);
