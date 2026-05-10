@@ -121,15 +121,15 @@ export function useSignalLog() {
   }, [syncToServer]);
 
   // --- Automatic Trade Outcome Resolution ---
-  // Simple: fetch the CURRENT LIVE PRICE and check if it has crossed SL or TP
+  // Walks through candles since trade creation to find which level (TP or SL) was hit FIRST
   const checkTradeOutcomes = useCallback(async () => {
     const currentLogs = logsRef.current;
     const activeTrades = currentLogs.filter(l => l.status === 'ACTIVE');
     if (activeTrades.length === 0) return;
 
-    // Fetch live prices for all active symbols
+    // Fetch candle history for all active symbols
     const symbols = [...new Set(activeTrades.map(l => l.symbol))];
-    const livePrices = {};
+    const candleData = {};
 
     for (const sym of symbols) {
       try {
@@ -138,48 +138,83 @@ export function useSignalLog() {
           'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F', 'BTCUSD': 'BTC-USD'
         }[sym] || `${sym}=X`;
 
-        const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=1m&range=1d`);
+        // Fetch 5m candles for 5 days — covers weekends and long absences
+        const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=5m&range=5d`);
         if (!res.ok) continue;
         const data = await res.json();
-        livePrices[sym] = data.chart.result[0].meta.regularMarketPrice;
+        const result = data.chart.result[0];
+        candleData[sym] = {
+          timestamps: result.timestamp || [],
+          highs: result.indicators.quote[0].high,
+          lows: result.indicators.quote[0].low,
+          current: result.meta.regularMarketPrice
+        };
       } catch (_) {}
     }
 
-    if (Object.keys(livePrices).length === 0) return;
+    if (Object.keys(candleData).length === 0) return;
 
     setLogs(prev => {
       let changed = false;
       const updated = prev.map(log => {
         if (log.status !== 'ACTIVE') return log;
 
-        const price = livePrices[log.symbol];
-        if (!price) return log;
+        const data = candleData[log.symbol];
+        if (!data) return log;
 
-        if (log.signal === 'BUY') {
-          // BUY wins when price rises to TP, fails when price drops to SL
-          if (price >= log.tp) {
-            changed = true;
-            console.log('[SignalLog] ✅ BUY TP HIT:', log.symbol, 'Entry:', log.entry, 'TP:', log.tp, 'Live:', price);
-            return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString(), closePrice: price };
-          }
-          if (price <= log.sl) {
-            changed = true;
-            console.log('[SignalLog] ❌ BUY SL HIT:', log.symbol, 'Entry:', log.entry, 'SL:', log.sl, 'Live:', price);
-            return { ...log, status: 'FAILED', closedAt: new Date().toISOString(), closePrice: price };
-          }
-        } else if (log.signal === 'SELL') {
-          // SELL wins when price drops to TP, fails when price rises to SL
-          if (price <= log.tp) {
-            changed = true;
-            console.log('[SignalLog] ✅ SELL TP HIT:', log.symbol, 'Entry:', log.entry, 'TP:', log.tp, 'Live:', price);
-            return { ...log, status: 'SUCCESS', closedAt: new Date().toISOString(), closePrice: price };
-          }
-          if (price >= log.sl) {
-            changed = true;
-            console.log('[SignalLog] ❌ SELL SL HIT:', log.symbol, 'Entry:', log.entry, 'SL:', log.sl, 'Live:', price);
-            return { ...log, status: 'FAILED', closedAt: new Date().toISOString(), closePrice: price };
+        const tradeCreatedSec = Math.floor(new Date(log.timestamp).getTime() / 1000);
+
+        // Walk through candles AFTER the trade was created, in chronological order
+        // Find which level was hit FIRST
+        for (let i = 0; i < data.timestamps.length; i++) {
+          if (data.timestamps[i] < tradeCreatedSec) continue; // Skip candles before trade
+          const high = data.highs[i];
+          const low = data.lows[i];
+          if (high == null || low == null) continue;
+
+          if (log.signal === 'BUY') {
+            const tpHit = high >= log.tp;
+            const slHit = low <= log.sl;
+
+            if (tpHit && slHit) {
+              // Both hit in same candle — check which is closer to open (conservative: SL wins)
+              changed = true;
+              console.log('[SignalLog] ⚠️ BUY both hit same candle:', log.symbol, 'SL wins (conservative)');
+              return { ...log, status: 'FAILED', closedAt: new Date(data.timestamps[i] * 1000).toISOString(), closePrice: log.sl };
+            }
+            if (tpHit) {
+              changed = true;
+              console.log('[SignalLog] ✅ BUY TP HIT FIRST:', log.symbol, log.entry, '→', log.tp, 'at candle', i);
+              return { ...log, status: 'SUCCESS', closedAt: new Date(data.timestamps[i] * 1000).toISOString(), closePrice: log.tp };
+            }
+            if (slHit) {
+              changed = true;
+              console.log('[SignalLog] ❌ BUY SL HIT FIRST:', log.symbol, log.entry, '→', log.sl, 'at candle', i);
+              return { ...log, status: 'FAILED', closedAt: new Date(data.timestamps[i] * 1000).toISOString(), closePrice: log.sl };
+            }
+          } else if (log.signal === 'SELL') {
+            const tpHit = low <= log.tp;
+            const slHit = high >= log.sl;
+
+            if (tpHit && slHit) {
+              changed = true;
+              console.log('[SignalLog] ⚠️ SELL both hit same candle:', log.symbol, 'SL wins (conservative)');
+              return { ...log, status: 'FAILED', closedAt: new Date(data.timestamps[i] * 1000).toISOString(), closePrice: log.sl };
+            }
+            if (tpHit) {
+              changed = true;
+              console.log('[SignalLog] ✅ SELL TP HIT FIRST:', log.symbol, log.entry, '→', log.tp, 'at candle', i);
+              return { ...log, status: 'SUCCESS', closedAt: new Date(data.timestamps[i] * 1000).toISOString(), closePrice: log.tp };
+            }
+            if (slHit) {
+              changed = true;
+              console.log('[SignalLog] ❌ SELL SL HIT FIRST:', log.symbol, log.entry, '→', log.sl, 'at candle', i);
+              return { ...log, status: 'FAILED', closedAt: new Date(data.timestamps[i] * 1000).toISOString(), closePrice: log.sl };
+            }
           }
         }
+
+        // No candle hit either level yet — trade stays ACTIVE
         return log;
       });
       if (changed) {

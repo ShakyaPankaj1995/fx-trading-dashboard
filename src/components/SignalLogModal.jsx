@@ -115,6 +115,8 @@ const LogTable = ({ logs, onSelectSymbol }) => {
           <th>Strategy</th>
           <th>Signal</th>
           <th>Entry</th>
+          <th>SL</th>
+          <th>TP</th>
           <th>Close</th>
           <th>PnL</th>
           <th>Status</th>
@@ -125,6 +127,7 @@ const LogTable = ({ logs, onSelectSymbol }) => {
         {logs.map(log => {
           const pnl = calcPnL(log);
           const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(log.symbol);
+          const prec = isForex ? 5 : 2;
           const multiplier = isForex ? 10000 : 1;
           const pnlFormatted = pnl !== null ? (pnl * multiplier).toFixed(1) : '...';
           
@@ -137,9 +140,9 @@ const LogTable = ({ logs, onSelectSymbol }) => {
 
           // Determine close info
           const closePriceDisplay = log.closePrice 
-            ? Number(log.closePrice).toFixed(isForex ? 5 : 2)
+            ? Number(log.closePrice).toFixed(prec)
             : log.status === 'ACTIVE' 
-              ? (prices[log.symbol] ? Number(prices[log.symbol]).toFixed(isForex ? 5 : 2) : '—')
+              ? (prices[log.symbol] ? Number(prices[log.symbol]).toFixed(prec) : '—')
               : '—';
           
           const closedAtDisplay = log.closedAt 
@@ -158,7 +161,9 @@ const LogTable = ({ logs, onSelectSymbol }) => {
                 {log.signal === 'BUY' ? <TrendingUp size={11}/> : <TrendingDown size={11}/>} {log.signal}
               </span>
             </td>
-            <td className="log-cell-mono">{Number(log.entry).toFixed(isForex ? 5 : 2)}</td>
+            <td className="log-cell-mono">{Number(log.entry).toFixed(prec)}</td>
+            <td className="log-cell-mono" style={{ color: 'var(--sell-red)', fontSize: '0.75rem' }}>{Number(log.sl).toFixed(prec)}</td>
+            <td className="log-cell-mono" style={{ color: 'var(--buy-green)', fontSize: '0.75rem' }}>{Number(log.tp).toFixed(prec)}</td>
             <td className="log-cell-mono" style={{ fontSize: '0.7rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                 <span style={{ 
