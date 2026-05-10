@@ -66,7 +66,8 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
             entry: analysis.entry,
             sl: analysis.sl,
             tp: analysis.tp,
-            setupTime: analysis.setupTime
+            setupTime: analysis.setupTime,
+            currentPrice: chartData.meta.regularMarketPrice
           });
         }
       }

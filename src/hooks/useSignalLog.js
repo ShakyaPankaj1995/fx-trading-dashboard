@@ -90,6 +90,23 @@ export function useSignalLog() {
 
       if (!entryVal || !slVal || !tpVal || isNaN(entryVal)) return prev;
 
+      // Ensure the entry price is relatively close to the current live price
+      if (signal.currentPrice) {
+        const live = Number(signal.currentPrice);
+        
+        // 1. Reject if it has already hit TP or SL
+        if (signal.signal === 'BUY' && (live >= tpVal || live <= slVal)) return prev;
+        if (signal.signal === 'SELL' && (live <= tpVal || live >= slVal)) return prev;
+
+        // 2. Reject if it is too far from entry (Max allowed deviation is 30% of the distance to TP)
+        const tpDistance = Math.abs(tpVal - entryVal);
+        const liveDistance = Math.abs(live - entryVal);
+        if (liveDistance > tpDistance * 0.3) {
+          console.log(`[SignalLog] Rejected stale signal: Entry ${entryVal}, but live price is ${live}`);
+          return prev;
+        }
+      }
+
       const rr = signal.signal === 'BUY'
         ? ((tpVal - entryVal) / Math.abs(entryVal - slVal)).toFixed(2)
         : ((entryVal - tpVal) / Math.abs(slVal - entryVal)).toFixed(2);

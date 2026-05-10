@@ -117,7 +117,8 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
           addSignal({
             symbol, timeframe: interval, strategy: 'Justin Setup',
             signal: analysis.signal, entry: analysis.entry, sl: analysis.sl, tp: analysis.tp,
-            setupTime: analysis.setupTime
+            setupTime: analysis.setupTime,
+            currentPrice: primaryData.meta.regularMarketPrice
           });
         }
       }
