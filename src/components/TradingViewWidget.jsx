@@ -57,6 +57,10 @@ const TradingViewWidget = ({ symbol, interval }) => {
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
+    const chartPrecision = isForex ? 5 : 2;
+    const minMove = isForex ? 0.00001 : 0.01;
+
     // Initialize Chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -72,6 +76,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+      },
+      localization: {
+        priceFormatter: p => p.toFixed(chartPrecision),
       },
     });
 
@@ -96,10 +103,6 @@ const TradingViewWidget = ({ symbol, interval }) => {
       lineWidth: 1,
     });
 
-    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
-    const chartPrecision = isForex ? 5 : 2;
-    const minMove = isForex ? 0.00001 : 0.01;
-
     // 2. Add Candle Series on top
     const candleSeries = chart.addCandlestickSeries({
       upColor: '#0ecb81',
@@ -115,6 +118,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
     });
 
     chartRef.current = chart;
+    let isMounted = true;
 
     const fetchData = async () => {
       try {
@@ -139,6 +143,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
         else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'GC=F';
 
         const res = await fetch(`/api/finance/v8/finance/chart/${yfSymbol}?interval=${yfInterval}&range=${range}`);
+        if (!isMounted) return;
         if (!res.ok) throw new Error('Data fetch failed');
         const json = await res.json();
         const data = json.chart.result[0];
@@ -298,8 +303,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
     resizeObserver.observe(chartContainerRef.current);
 
     return () => {
+      isMounted = false;
       resizeObserver.disconnect();
-      chart.remove();
+      try { chart.remove(); } catch(e) {}
       fvgDimSeriesRef.current = null;
       fvgHighlightSeriesRef.current = null;
     };
