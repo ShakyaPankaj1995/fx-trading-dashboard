@@ -215,36 +215,32 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   // --- Step 1: Detect HTF FVGs ---
   const { bullishFVGs, bearishFVGs } = detectFVGs(pH, pL, pC, pTimestamps);
 
-  // Find the most recent unmitigated FVGs
-  const activeBullFVG = [...bullishFVGs].reverse().find(f => !f.mitigated);
-  const activeBearFVG = [...bearishFVGs].reverse().find(f => !f.mitigated);
+  const unmitigatedBull = bullishFVGs.filter(f => !f.mitigated);
+  const unmitigatedBear = bearishFVGs.filter(f => !f.mitigated);
+
+  const nearestBullFVG = [...unmitigatedBull].sort((a, b) => Math.abs(currentPrice - a.high) - Math.abs(currentPrice - b.high))[0] || null;
+  const nearestBearFVG = [...unmitigatedBear].sort((a, b) => Math.abs(currentPrice - a.low) - Math.abs(currentPrice - b.low))[0] || null;
 
   // HTF Confirmation (for 4H, 1H, 15M)
   if (intervalStr !== '5') {
-    const htfBase = {
-      activeBullFVG,
-      activeBearFVG,
+    return {
+      nearestBullFVG,
+      nearestBearFVG,
       currentPrice,
-      allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
-      allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
+      signal: 'HTF_INFO'
     };
-    if (activeBullFVG) return { ...htfBase, signal: 'WAIT', reason: 'Bullish FVG Identified (Unmitigated)', color: 'var(--buy-green)' };
-    if (activeBearFVG) return { ...htfBase, signal: 'WAIT', reason: 'Bearish FVG Identified (Unmitigated)', color: 'var(--sell-red)' };
-    return { ...htfBase, signal: 'NEUTRAL', reason: 'No unmitigated HTF FVGs found' };
   }
 
   // --- 5M Entry Logic ---
-  // Condition 1: Inside HTF FVG (We use the current timeframe's FVG if HTF data isn't passed, but the strategy is designed to work on the HTF context)
-  const inBullFVG = activeBullFVG && currentClose >= activeBullFVG.low && currentClose <= activeBullFVG.high;
-  const inBearFVG = activeBearFVG && currentClose <= activeBearFVG.high && currentClose >= activeBearFVG.low;
-
-  // Condition 2: Sweep
+  // The UI will handle "Tick 1: Price in HTF FVG" using the htfFVGs state.
+  
+  // Tick 2: Sweep
   const sweep = detectSweep(pH, pL, pC, 40);
 
-  // Condition 3: CISD
+  // Tick 4: CISD
   const { bullishCISD, bearishCISD, cisdBullFVG, cisdBearFVG } = detectCISD(pH, pL, pC, pO);
 
-  // SMT (Optional extra)
+  // Tick 3: SMT
   const hasSMT = cH.length > 20;
   const { bullishSMT, bearishSMT } = hasSMT
     ? checkSMTDivergence(pL, pH, cL, cH)
@@ -253,65 +249,17 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   // Calculate ATR for SL buffer
   const atr = pH.slice(-14).reduce((acc, h, i) => acc + (h - pL[pL.length - 14 + i]), 0) / 14;
 
-  const confirmations = {
-    inFVG: inBullFVG || inBearFVG,
-    sweep: !!sweep,
-    cisd: bullishCISD || bearishCISD
-  };
-
-  // ===== BUY SIGNAL =====
-  if (inBullFVG && sweep?.type === 'BUY_SWEEP' && bullishCISD) {
-    const sweepLow = sweep.sweepLow;
-    const entry    = cisdBullFVG ? cisdBullFVG.low : currentClose;
-    const sl       = sweepLow - atr * 0.1;
-    const tp       = entry + (entry - sl) * 2.5;
-    
-    return {
-      signal: 'BUY', entry, sl, tp,
-      setupTime: pTimestamps[pTimestamps.length - 1],
-      confirmations, currentPrice,
-      reason: 'Justin Setup — 5M Entry Confirmed',
-      reasoning: [
-        `✅ Price inside HTF Bullish FVG (${activeBullFVG.low.toFixed(2)}-${activeBullFVG.high.toFixed(2)})`,
-        `✅ Internal Low swept at ${sweepLow.toFixed(2)} (Liquidity grabbed)`,
-        `✅ Bullish CISD: Displacement shift confirmed`,
-        `R:R: 2.5x Target set at ${tp.toFixed(2)}`
-      ],
-      allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
-      allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
-    };
-  }
-
-  // ===== SELL SIGNAL =====
-  if (inBearFVG && sweep?.type === 'SELL_SWEEP' && bearishCISD) {
-    const sweepHigh = sweep.sweepHigh;
-    const entry     = cisdBearFVG ? cisdBearFVG.high : currentClose;
-    const sl        = sweepHigh + atr * 0.1;
-    const tp        = entry - (sl - entry) * 2.5;
-
-    return {
-      signal: 'SELL', entry, sl, tp,
-      setupTime: pTimestamps[pTimestamps.length - 1],
-      confirmations, currentPrice,
-      reason: 'Justin Setup — 5M Entry Confirmed',
-      reasoning: [
-        `✅ Price inside HTF Bearish FVG (${activeBearFVG.low.toFixed(2)}-${activeBearFVG.high.toFixed(2)})`,
-        `✅ Internal High swept at ${sweepHigh.toFixed(2)} (Liquidity grabbed)`,
-        `✅ Bearish CISD: Displacement shift confirmed`,
-        `R:R: 2.5x Target set at ${tp.toFixed(2)}`
-      ],
-      allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
-      allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
-    };
-  }
-
-  return { 
-    signal: 'WAIT', 
-    reason: 'Justin Setup: Scanning 5M Conditions...',
-    confirmations, currentPrice,
-    activeBullFVG,
-    activeBearFVG,
-    allBullishFVGs: bullishFVGs.filter(f => !f.mitigated),
-    allBearishFVGs: bearishFVGs.filter(f => !f.mitigated)
+  return {
+    signal: '5M_DATA',
+    currentPrice,
+    sweep,
+    bullishCISD,
+    bearishCISD,
+    cisdBullFVG,
+    cisdBearFVG,
+    bullishSMT,
+    bearishSMT,
+    atr,
+    setupTime: pTimestamps[pTimestamps.length - 1]
   };
 }

@@ -137,6 +137,15 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     return () => clearInterval(id);
   }, [symbol, interval, refreshTrigger]);
 
+  useEffect(() => {
+    if (interval !== '5' && onUpdateFVG && signalData) {
+      onUpdateFVG(interval, {
+        bullish: signalData.nearestBullFVG,
+        bearish: signalData.nearestBearFVG
+      });
+    }
+  }, [signalData, interval]);
+
   if (loading && !signalData) {
     return (
       <div className="chart-signal loading">
@@ -147,77 +156,169 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   }
 
   if (error) return <div className="chart-signal error"><span>{error}</span></div>;
+  if (!signalData) return null;
 
-  const { signal, reason, entry, sl, tp, reasoning, setupTime, confirmations, color } = signalData;
-  const isNeutral = signal === 'NEUTRAL' || signal === 'WAIT';
-  const is5m = interval === '5';
+  if (interval !== '5') {
+    const bullFVG = signalData.nearestBullFVG;
+    const bearFVG = signalData.nearestBearFVG;
+    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
+    const prec = isForex ? 5 : 2;
 
-  // For 5M, check which HTF FVGs we are in
-  let insideTimeframes = [];
-  if (is5m && htfFVGs) {
-    const cp = signalData.currentPrice;
-    Object.entries(htfFVGs).forEach(([tf, fvg]) => {
-      if (fvg && cp >= fvg.low && cp <= fvg.high) {
-        insideTimeframes.push({
-          label: TIMEFRAME_LABELS[tf] || tf,
-          type: fvg.type,
-          low: fvg.low?.toFixed(5),
-          high: fvg.high?.toFixed(5)
-        });
+    return (
+      <div className="chart-signal compact neutral" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+        <div className="signal-reason-small" style={{ color: 'var(--text-primary)' }}>Nearest Unmitigated FVGs</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', width: '100%' }}>
+          {bullFVG ? (
+             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+               <span style={{ color: 'var(--buy-green)' }}>▲ Bullish</span>
+               <span style={{ fontFamily: 'var(--font-mono)' }}>{bullFVG.low.toFixed(prec)} - {bullFVG.high.toFixed(prec)}</span>
+             </div>
+          ) : (
+             <div style={{ color: 'var(--text-secondary)' }}>No Bullish FVG</div>
+          )}
+          {bearFVG ? (
+             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+               <span style={{ color: 'var(--sell-red)' }}>▼ Bearish</span>
+               <span style={{ fontFamily: 'var(--font-mono)' }}>{bearFVG.low.toFixed(prec)} - {bearFVG.high.toFixed(prec)}</span>
+             </div>
+          ) : (
+             <div style={{ color: 'var(--text-secondary)' }}>No Bearish FVG</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // --- 5M Logic ---
+  const cp = signalData.currentPrice;
+  const inFVGs = [];
+  let allBullish = true;
+  let allBearish = true;
+
+  if (htfFVGs) {
+    Object.entries(htfFVGs).forEach(([tf, fvgs]) => {
+      const label = TIMEFRAME_LABELS[tf] || tf;
+      if (fvgs.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
+        inFVGs.push({ tf: label, type: 'BULL' });
+        allBearish = false;
+      } else if (fvgs.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
+        inFVGs.push({ tf: label, type: 'BEAR' });
+        allBullish = false;
       }
     });
   }
 
+  const isAlignedBullish = inFVGs.length > 0 && allBullish;
+  const isAlignedBearish = inFVGs.length > 0 && allBearish;
+
+  // Tick 1
+  const tick1Active = inFVGs.length > 0;
+  const tick1Text = tick1Active 
+    ? `Price in HTF FVG (${inFVGs.map(f => `${f.tf} ${f.type === 'BULL' ? 'Bullish' : 'Bearish'}`).join(', ')})`
+    : 'Price not in HTF FVG';
+
+  // Tick 2
+  let tick2Active = false;
+  let tick2Text = 'Waiting for HTF Alignment';
+  if (isAlignedBullish) {
+    tick2Active = signalData.sweep?.type === 'BUY_SWEEP';
+    tick2Text = tick2Active ? `Internal Low Swept (${signalData.sweep.sweepLow.toFixed(2)})` : 'Waiting for Internal Low Sweep';
+  } else if (isAlignedBearish) {
+    tick2Active = signalData.sweep?.type === 'SELL_SWEEP';
+    tick2Text = tick2Active ? `Internal High Swept (${signalData.sweep.sweepHigh.toFixed(2)})` : 'Waiting for Internal High Sweep';
+  }
+
+  // Tick 3
+  let tick3Active = false;
+  let tick3Text = 'Waiting for Sweep to check SMT';
+  if (tick2Active) {
+     if (isAlignedBullish) {
+        tick3Active = signalData.bullishSMT;
+        tick3Text = tick3Active ? 'Bullish SMT Divergence Confirmed' : 'No Bullish SMT Divergence';
+     } else {
+        tick3Active = signalData.bearishSMT;
+        tick3Text = tick3Active ? 'Bearish SMT Divergence Confirmed' : 'No Bearish SMT Divergence';
+     }
+  }
+
+  // Tick 4
+  let tick4Active = false;
+  let tick4Text = 'Waiting for CISD';
+  if (tick2Active) {
+     if (isAlignedBullish) {
+        tick4Active = signalData.bullishCISD;
+        tick4Text = tick4Active ? 'Bullish CISD (Displacement) Confirmed' : 'Waiting for Bullish CISD';
+     } else {
+        tick4Active = signalData.bearishCISD;
+        tick4Text = tick4Active ? 'Bearish CISD (Displacement) Confirmed' : 'Waiting for Bearish CISD';
+     }
+  }
+
+  // Final Signal
+  let finalSignal = 'NEUTRAL';
+  let entry, sl, tp;
+  if (isAlignedBullish && tick2Active && tick4Active) {
+     finalSignal = 'BUY';
+     entry = signalData.cisdBullFVG ? signalData.cisdBullFVG.low : cp;
+     sl = signalData.sweep.sweepLow - signalData.atr * 0.1;
+     tp = entry + (entry - sl) * 2.5;
+  } else if (isAlignedBearish && tick2Active && tick4Active) {
+     finalSignal = 'SELL';
+     entry = signalData.cisdBearFVG ? signalData.cisdBearFVG.high : cp;
+     sl = signalData.sweep.sweepHigh + signalData.atr * 0.1;
+     tp = entry - (sl - entry) * 2.5;
+  }
+
+  // Log signal automatically if conditions met
+  useEffect(() => {
+    if ((finalSignal === 'BUY' || finalSignal === 'SELL') && addSignal) {
+      const key = `${symbol}-5-justin-${finalSignal}-${entry?.toFixed(2)}`;
+      if (lastLoggedRef.current !== key) {
+        lastLoggedRef.current = key;
+        addSignal({
+          symbol, timeframe: '5', strategy: 'Justin Setup',
+          signal: finalSignal, entry, sl, tp,
+          setupTime: signalData.setupTime,
+          currentPrice: cp
+        });
+      }
+    }
+  }, [finalSignal, entry, sl, tp, signalData.setupTime, cp, symbol, addSignal]);
+
+  const tickStyle = (active) => ({
+    display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem',
+    opacity: active ? 1 : 0.6
+  });
+
   return (
-    <div className={`chart-signal compact ${signal.toLowerCase()}`} style={{ borderLeft: color ? `4px solid ${color}` : '' }}>
-      <div className="signal-left">
-        <div className={`signal-badge-small ${signal.toLowerCase()}`}>
-          {signal === 'BUY' ? <TrendingUp size={10}/> : signal === 'SELL' ? <TrendingDown size={10}/> : null}
-          {' '}{signal}
+    <div className={`chart-signal compact ${finalSignal.toLowerCase()}`}>
+      <div className="signal-left" style={{ width: '100%' }}>
+        <div className={`signal-badge-small ${finalSignal.toLowerCase()}`}>
+          {finalSignal === 'BUY' ? <TrendingUp size={10}/> : finalSignal === 'SELL' ? <TrendingDown size={10}/> : null}
+          {' '}Justin {finalSignal}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span className="signal-reason-small" style={{ color: color || '' }}>{reason}</span>
-          {setupTime && (
-            <span style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
-              Start: {new Date(setupTime * 1000).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
-            </span>
-          )}
+        
+        <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+          <div style={tickStyle(tick1Active)}>
+            {tick1Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+            <span>01. {tick1Text}</span>
+          </div>
+          <div style={tickStyle(tick2Active)}>
+            {tick2Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+            <span>02. {tick2Text}</span>
+          </div>
+          <div style={tickStyle(tick3Active)}>
+            {tick3Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+            <span>03. {tick3Text}</span>
+          </div>
+          <div style={tickStyle(tick4Active)}>
+            {tick4Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+            <span>04. {tick4Text}</span>
+          </div>
         </div>
-      </div>
 
-      {is5m && confirmations && (
-        <div style={{ padding: '8px', background: 'rgba(0,0,0,0.15)', borderRadius: '6px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
-            {(confirmations.inFVG || insideTimeframes.length > 0) ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
-            <span style={{ opacity: (confirmations.inFVG || insideTimeframes.length > 0) ? 1 : 0.5 }}>
-              {insideTimeframes.length > 0 
-                ? `Price inside ${insideTimeframes.map(t => t.label).join(' + ')} FVG`
-                : 'Price inside HTF FVG'}
-            </span>
-          </div>
-          {insideTimeframes.length > 0 && (
-            <div style={{ marginLeft: '24px', fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              {insideTimeframes.map((t, i) => (
-                <span key={i} style={{ color: t.type === 'BULL' ? 'var(--buy-green)' : 'var(--sell-red)' }}>
-                  {t.label}: {t.type === 'BULL' ? '▲ Bullish' : '▼ Bearish'} ({t.low} – {t.high})
-                </span>
-              ))}
-            </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
-            {confirmations.sweep ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
-            <span style={{ opacity: confirmations.sweep ? 1 : 0.5 }}>Internal Liquidity Sweep</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
-            {confirmations.cisd ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span style={{ opacity: 0.3 }}>⭕</span>}
-            <span style={{ opacity: confirmations.cisd ? 1 : 0.5 }}>CISD (Displacement)</span>
-          </div>
-        </div>
-      )}
-
-      {!isNeutral && (
-        <div className="signal-right">
-          <div className="signal-prices">
+        {finalSignal !== 'NEUTRAL' && (
+          <div className="signal-prices" style={{ marginTop: '8px' }}>
             <div className="price-item">
               <span className="price-label">Entry</span>
               <span className="price-value">{entry?.toFixed(2)}</span>
@@ -232,17 +333,8 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
               <span className="price-value sl">{sl?.toFixed(2)}</span>
             </div>
           </div>
-        </div>
-      )}
-
-      {!isNeutral && reasoning?.length > 0 && (
-        <div className="signal-reasoning">
-          <div className="reasoning-title">Justin Setup Logic</div>
-          <ul className="reasoning-list">
-            {reasoning.map((r, i) => <li key={i} className="reasoning-item">{r}</li>)}
-          </ul>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
