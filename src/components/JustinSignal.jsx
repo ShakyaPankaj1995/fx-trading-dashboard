@@ -146,6 +146,59 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     }
   }, [signalData, interval]);
 
+  // Log signal automatically if conditions met (5M only)
+  useEffect(() => {
+    if (interval === '5' && signalData && htfFVGs && addSignal) {
+      const cp = signalData.currentPrice;
+      let allBullish = true;
+      let allBearish = true;
+      let inFVGsCount = 0;
+
+      Object.entries(htfFVGs).forEach(([tf, fvgs]) => {
+        if (fvgs.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
+          inFVGsCount++;
+          allBearish = false;
+        } else if (fvgs.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
+          inFVGsCount++;
+          allBullish = false;
+        }
+      });
+
+      const isAlignedBullish = inFVGsCount > 0 && allBullish;
+      const isAlignedBearish = inFVGsCount > 0 && allBearish;
+
+      let finalSignal = 'NEUTRAL';
+      let entry, sl, tp;
+
+      if (isAlignedBullish && signalData.sweep?.type === 'BUY_SWEEP' && signalData.bullishCISD) {
+         finalSignal = 'BUY';
+         entry = signalData.cisdBullFVG ? signalData.cisdBullFVG.low : cp;
+         sl = signalData.sweep.sweepLow - signalData.atr * 0.1;
+         tp = entry + (entry - sl) * 2.5;
+      } else if (isAlignedBearish && signalData.sweep?.type === 'SELL_SWEEP' && signalData.bearishCISD) {
+         finalSignal = 'SELL';
+         entry = signalData.cisdBearFVG ? signalData.cisdBearFVG.high : cp;
+         sl = signalData.sweep.sweepHigh + signalData.atr * 0.1;
+         tp = entry - (sl - entry) * 2.5;
+      }
+
+      if (finalSignal === 'BUY' || finalSignal === 'SELL') {
+        const key = `${symbol}-5-justin-${finalSignal}-${entry?.toFixed(2)}`;
+        if (lastLoggedRef.current !== key) {
+          lastLoggedRef.current = key;
+          addSignal({
+            symbol, timeframe: '5', strategy: 'Justin Setup',
+            signal: finalSignal, entry, sl, tp,
+            setupTime: signalData.setupTime,
+            currentPrice: cp
+          });
+        }
+      }
+    }
+  }, [signalData, htfFVGs, interval, symbol, addSignal]);
+
+
+
   if (loading && !signalData) {
     return (
       <div className="chart-signal loading">
@@ -268,22 +321,6 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
      sl = signalData.sweep.sweepHigh + signalData.atr * 0.1;
      tp = entry - (sl - entry) * 2.5;
   }
-
-  // Log signal automatically if conditions met
-  useEffect(() => {
-    if ((finalSignal === 'BUY' || finalSignal === 'SELL') && addSignal) {
-      const key = `${symbol}-5-justin-${finalSignal}-${entry?.toFixed(2)}`;
-      if (lastLoggedRef.current !== key) {
-        lastLoggedRef.current = key;
-        addSignal({
-          symbol, timeframe: '5', strategy: 'Justin Setup',
-          signal: finalSignal, entry, sl, tp,
-          setupTime: signalData.setupTime,
-          currentPrice: cp
-        });
-      }
-    }
-  }, [finalSignal, entry, sl, tp, signalData.setupTime, cp, symbol, addSignal]);
 
   const tickStyle = (active) => ({
     display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem',
