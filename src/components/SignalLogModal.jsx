@@ -53,7 +53,7 @@ const LogTable = ({ logs, onSelectSymbol }) => {
         try {
           let ticker = {
             'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X', 'USDJPY': 'USDJPY=X',
-            'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F'
+            'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F', 'BTCUSD': 'BTC-USD'
           }[sym] || `${sym}=X`;
           const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=1m&range=1d`);
           const data = await res.json();
@@ -124,13 +124,13 @@ const LogTable = ({ logs, onSelectSymbol }) => {
       <tbody>
         {logs.map(log => {
           const pnl = calcPnL(log);
-          const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(log.symbol);
+          const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(log.symbol);
           const multiplier = isForex ? 10000 : 1;
           const pnlFormatted = pnl !== null ? (pnl * multiplier).toFixed(1) : '...';
           
           const tvTicker = {
             'EURUSD': 'FX:EURUSD', 'GBPUSD': 'FX:GBPUSD', 'USDJPY': 'FX:USDJPY',
-            'XAUUSD': 'OANDA:XAUUSD', 'S&P500': 'OANDA:SPX500USD', 'NASDAQ': 'OANDA:NAS100USD'
+            'XAUUSD': 'OANDA:XAUUSD', 'S&P500': 'OANDA:SPX500USD', 'NASDAQ': 'OANDA:NAS100USD', 'BTCUSD': 'BINANCE:BTCUSDT'
           }[log.symbol] || log.symbol;
 
           const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=${log.timeframe}`;

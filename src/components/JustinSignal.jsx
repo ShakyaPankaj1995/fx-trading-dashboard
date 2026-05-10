@@ -37,6 +37,7 @@ const SMT_PAIRS = {
   'GBPUSD': { ticker: 'GBPUSD=X', correlatedTicker: 'EURUSD=X', correlatedName: 'EURUSD' },
   'XAUUSD': { ticker: 'GC=F', correlatedTicker: 'SI=F', correlatedName: 'Silver' },
   'USDJPY': { ticker: 'USDJPY=X', correlatedTicker: null, correlatedName: null },
+  'BTCUSD': { ticker: 'BTC-USD', correlatedTicker: null, correlatedName: null },
 };
 
 const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd, htfFVGs, onUpdateFVG }) => {

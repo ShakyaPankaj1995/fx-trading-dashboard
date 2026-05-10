@@ -83,7 +83,7 @@ export function useSignalLog() {
       );
       if (recentDuplicate) return prev;
 
-      const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(signal.symbol);
+      const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(signal.symbol);
       const entryVal = Number(signal.entry);
       const slVal = Number(signal.sl);
       const tpVal = Number(signal.tp);
@@ -135,7 +135,7 @@ export function useSignalLog() {
       try {
         let ticker = {
           'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X', 'USDJPY': 'USDJPY=X',
-          'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F'
+          'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F', 'BTCUSD': 'BTC-USD'
         }[sym] || `${sym}=X`;
 
         const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=1m&range=1d`);

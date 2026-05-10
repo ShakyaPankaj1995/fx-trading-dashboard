@@ -131,6 +131,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
         let yfSymbol = `${symbol}=X`;
         if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') yfSymbol = 'ES=F';
         else if (symbol === 'NDX' || symbol === 'NASDAQ') yfSymbol = 'NQ=F';
+        else if (symbol === 'BTCUSD' || symbol === 'BTC') yfSymbol = 'BTC-USD';
         else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'GC=F';
 
         const res = await fetch(`/api/finance/v8/finance/chart/${yfSymbol}?interval=${yfInterval}&range=${range}`);

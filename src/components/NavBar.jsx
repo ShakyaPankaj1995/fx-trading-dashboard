@@ -3,7 +3,7 @@ import { LineChart, ClipboardList, Calendar } from 'lucide-react';
 import { useSignalLogContext } from '../context/SignalLogContext';
 
 const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog, onOpenEvents }) => {
-  const assets = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'S&P500', 'NASDAQ'];
+  const assets = ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'S&P500', 'NASDAQ', 'BTCUSD'];
   const { logs, addSignal } = useSignalLogContext();
   const activeCount = logs.filter(l => l.status === 'ACTIVE').length;
 
