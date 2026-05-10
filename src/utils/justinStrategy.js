@@ -226,6 +226,8 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
     return {
       nearestBullFVG,
       nearestBearFVG,
+      allBullishFVGs: unmitigatedBull,
+      allBearishFVGs: unmitigatedBear,
       currentPrice,
       signal: 'HTF_INFO'
     };
@@ -260,6 +262,10 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
     bullishSMT,
     bearishSMT,
     atr,
-    setupTime: pTimestamps[pTimestamps.length - 1]
+    setupTime: pTimestamps[pTimestamps.length - 1],
+    nearestBullFVG,
+    nearestBearFVG,
+    allBullishFVGs: unmitigatedBull,
+    allBearishFVGs: unmitigatedBear
   };
 }

@@ -96,6 +96,10 @@ const TradingViewWidget = ({ symbol, interval }) => {
       lineWidth: 1,
     });
 
+    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
+    const chartPrecision = isForex ? 5 : 2;
+    const minMove = isForex ? 0.00001 : 0.01;
+
     // 2. Add Candle Series on top
     const candleSeries = chart.addCandlestickSeries({
       upColor: '#0ecb81',
@@ -105,8 +109,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
       wickDownColor: '#f6465d',
       priceFormat: {
         type: 'price',
-        precision: 5,
-        minMove: 0.00001,
+        precision: chartPrecision,
+        minMove: minMove,
       },
     });
 
@@ -165,8 +169,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
         // Draw FVGs with two tiers: highlighted (active) + dimmed (others)
         const allBull = justinSignal.allBullishFVGs || [];
         const allBear = justinSignal.allBearishFVGs || [];
-        const activeBull = justinSignal.activeBullFVG;
-        const activeBear = justinSignal.activeBearFVG;
+        const nearestBull = justinSignal.nearestBullFVG;
+        const nearestBear = justinSignal.nearestBearFVG;
         const hasFVGs = allBull.length > 0 || allBear.length > 0;
 
         if (hasFVGs) {
@@ -194,8 +198,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
 
         // Build FVG box data
         const isActiveFVG = (fvg) => {
-          if (activeBull && Math.abs(fvg.low - activeBull.low) < 0.0001 && Math.abs(fvg.high - activeBull.high) < 0.0001) return true;
-          if (activeBear && Math.abs(fvg.low - activeBear.low) < 0.0001 && Math.abs(fvg.high - activeBear.high) < 0.0001) return true;
+          if (nearestBull && Math.abs(fvg.low - nearestBull.low) < 0.0001 && Math.abs(fvg.high - nearestBull.high) < 0.0001) return true;
+          if (nearestBear && Math.abs(fvg.low - nearestBear.low) < 0.0001 && Math.abs(fvg.high - nearestBear.high) < 0.0001) return true;
           return false;
         };
 
