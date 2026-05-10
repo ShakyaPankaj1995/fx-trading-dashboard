@@ -155,10 +155,10 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       let inFVGsCount = 0;
 
       Object.entries(htfFVGs).forEach(([tf, fvgs]) => {
-        if (fvgs.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
+        if (fvgs?.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
           inFVGsCount++;
           allBearish = false;
-        } else if (fvgs.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
+        } else if (fvgs?.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
           inFVGsCount++;
           allBullish = false;
         }
@@ -251,10 +251,10 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   if (htfFVGs) {
     Object.entries(htfFVGs).forEach(([tf, fvgs]) => {
       const label = TIMEFRAME_LABELS[tf] || tf;
-      if (fvgs.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
+      if (fvgs?.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
         inFVGs.push({ tf: label, type: 'BULL' });
         allBearish = false;
-      } else if (fvgs.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
+      } else if (fvgs?.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
         inFVGs.push({ tf: label, type: 'BEAR' });
         allBullish = false;
       }
