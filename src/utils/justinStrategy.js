@@ -18,7 +18,8 @@ function detectFVGs(highs, lows, closes, timestamps) {
   const bullishFVGs = [];
   const bearishFVGs = [];
 
-  for (let i = 2; i < highs.length; i++) {
+  // We loop up to highs.length - 1 to ignore the ongoing active candle
+  for (let i = 2; i < highs.length - 1; i++) {
     const prevHigh = highs[i - 2];
     const prevLow  = lows[i - 2];
     const currHigh = highs[i];
