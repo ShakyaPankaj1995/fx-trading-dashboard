@@ -219,6 +219,12 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   const unmitigatedBull = bullishFVGs.filter(f => !f.mitigated);
   const unmitigatedBear = bearishFVGs.filter(f => !f.mitigated);
 
+  const mitigatedBull = bullishFVGs.filter(f => f.mitigated);
+  const mitigatedBear = bearishFVGs.filter(f => f.mitigated);
+
+  const recentMitigatedBull = mitigatedBull[mitigatedBull.length - 1] || null;
+  const recentMitigatedBear = mitigatedBear[mitigatedBear.length - 1] || null;
+
   const nearestBullFVG = [...unmitigatedBull].sort((a, b) => Math.abs(currentPrice - a.high) - Math.abs(currentPrice - b.high))[0] || null;
   const nearestBearFVG = [...unmitigatedBear].sort((a, b) => Math.abs(currentPrice - a.low) - Math.abs(currentPrice - b.low))[0] || null;
 
@@ -227,6 +233,8 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
     return {
       nearestBullFVG,
       nearestBearFVG,
+      recentMitigatedBull,
+      recentMitigatedBear,
       allBullishFVGs: unmitigatedBull,
       allBearishFVGs: unmitigatedBear,
       currentPrice,
@@ -266,6 +274,8 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
     setupTime: pTimestamps[pTimestamps.length - 1],
     nearestBullFVG,
     nearestBearFVG,
+    recentMitigatedBull,
+    recentMitigatedBear,
     allBullishFVGs: unmitigatedBull,
     allBearishFVGs: unmitigatedBear
   };

@@ -174,9 +174,11 @@ const TradingViewWidget = ({ symbol, interval }) => {
         // Draw FVGs with two tiers: highlighted (active) + dimmed (others)
         const allBull = justinSignal.allBullishFVGs || [];
         const allBear = justinSignal.allBearishFVGs || [];
+        const mitigatedBull = justinSignal.recentMitigatedBull;
+        const mitigatedBear = justinSignal.recentMitigatedBear;
         const nearestBull = justinSignal.nearestBullFVG;
         const nearestBear = justinSignal.nearestBearFVG;
-        const hasFVGs = allBull.length > 0 || allBear.length > 0;
+        const hasFVGs = allBull.length > 0 || allBear.length > 0 || mitigatedBull || mitigatedBear;
 
         if (hasFVGs) {
           // Dimmed series for all other FVGs
@@ -231,6 +233,23 @@ const TradingViewWidget = ({ symbol, interval }) => {
               };
               if (isActive) highlightData.push(entry);
               else dimData.push(entry);
+            }
+          });
+        });
+
+        // Add Mitigated FVGs
+        [mitigatedBull, mitigatedBear].filter(Boolean).forEach(fvg => {
+          const isBull = fvg === mitigatedBull;
+          const startTime = fvg.time;
+          formattedData.forEach(d => {
+            if (d.time >= startTime) {
+              highlightData.push({
+                time: d.time,
+                open: fvg.high, close: fvg.low,
+                high: fvg.high, low: fvg.low,
+                color: 'rgba(0, 0, 0, 0)',
+                borderColor: isBull ? 'rgba(14, 203, 129, 0.9)' : 'rgba(246, 70, 93, 0.9)',
+              });
             }
           });
         });
