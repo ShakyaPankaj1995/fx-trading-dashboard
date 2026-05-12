@@ -224,7 +224,10 @@ const TradingViewWidget = ({ symbol, interval }) => {
                 high: fvg.high, low: fvg.low,
                 color: isActive
                   ? (isBull ? 'rgba(14, 203, 129, 0.7)' : 'rgba(246, 70, 93, 0.7)')
-                  : (isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)')
+                  : (isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)'),
+                borderColor: isActive
+                  ? (isBull ? 'rgba(14, 203, 129, 0.9)' : 'rgba(246, 70, 93, 0.9)')
+                  : (isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)'),
               };
               if (isActive) highlightData.push(entry);
               else dimData.push(entry);
