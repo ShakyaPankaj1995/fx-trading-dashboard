@@ -38,6 +38,12 @@ function AppInner() {
   const [symbol, setSymbol] = useState('EURUSD');
   const [logOpen, setLogOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+  
+  // Shared state for Justin Strategy FVGs (used as a filter for other strategies)
+  const [htfFVGs, setHtfFVGs] = useState({});
+  const updateHTF_FVG = (interval, fvg) => {
+    setHtfFVGs(prev => ({ ...prev, [interval]: fvg }));
+  };
 
   return (
     <div className="app-container">
@@ -57,9 +63,9 @@ function AppInner() {
             </div>
           </div>
 
-          <StrategyCard symbol={symbol} />
-          <CRTStrategyCard symbol={symbol} />
-          <JustinStrategyCard symbol={symbol} />
+          <StrategyCard symbol={symbol} htfFVGs={htfFVGs} />
+          <CRTStrategyCard symbol={symbol} htfFVGs={htfFVGs} />
+          <JustinStrategyCard symbol={symbol} htfFVGs={htfFVGs} updateHTF_FVG={updateHTF_FVG} />
           <ChartGrid symbol={symbol} />
         </div>
       </main>

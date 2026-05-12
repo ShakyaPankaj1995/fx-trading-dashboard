@@ -5,7 +5,7 @@ import { useSignalLogContext } from '../context/SignalLogContext';
 
 const TIMEFRAME_LABELS = { '240': '4H', '60': '1H', '15': '15M', '5': '5M' };
 
-const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact = false, refreshTrigger = 0, onLoadStart, onLoadEnd }) => {
+const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact = false, refreshTrigger = 0, onLoadStart, onLoadEnd, disableTrades = false }) => {
   const [signalData, setSignalData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -50,6 +50,11 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
         ? analyzeCRTData(chartData, interval)
         : analyzeData(chartData, interval);
       
+      if (disableTrades) {
+        analysis.signal = 'WAIT';
+        analysis.reason = 'Awaiting Justin HTF Alignment (4H, 1H, 15M)';
+      }
+
       if (!isMountedRef.current) return; // Don't update if unmounted
       setSignalData(analysis);
 
@@ -84,7 +89,7 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
     fetchAndAnalyze();
     const refreshInterval = setInterval(fetchAndAnalyze, 60000);
     return () => clearInterval(refreshInterval);
-  }, [symbol, interval, refreshTrigger]);
+  }, [symbol, interval, refreshTrigger, disableTrades]);
 
   if (loading && !signalData) {
     return (

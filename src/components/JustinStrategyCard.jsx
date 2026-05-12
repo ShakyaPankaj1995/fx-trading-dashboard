@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import JustinSignal from './JustinSignal';
 import { Zap, RefreshCw } from 'lucide-react';
 
-const JustinStrategyCard = ({ symbol }) => {
+const JustinStrategyCard = ({ symbol, htfFVGs, updateHTF_FVG }) => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [loadingCount, setLoadingCount] = useState(0);
-  const [htfFVGs, setHtfFVGs] = useState({});
 
   const handleRefresh = () => {
     if (loadingCount > 0) return;
@@ -15,10 +14,6 @@ const JustinStrategyCard = ({ symbol }) => {
   const handleLoadStart = () => setLoadingCount(c => c + 1);
   const handleLoadEnd   = () => setLoadingCount(c => Math.max(0, c - 1));
   const isRefreshing    = loadingCount > 0;
-
-  const updateHTF_FVG = (interval, fvg) => {
-    setHtfFVGs(prev => ({ ...prev, [interval]: fvg }));
-  };
 
   const timeframes = [
     { label: '4 Hours',   interval: '240' },

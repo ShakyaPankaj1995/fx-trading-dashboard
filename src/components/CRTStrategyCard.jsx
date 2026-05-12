@@ -2,9 +2,15 @@ import React, { useState } from 'react';
 import ChartSignal from './ChartSignal';
 import { Crosshair, RefreshCw } from 'lucide-react';
 
-const CRTStrategyCard = ({ symbol }) => {
+const CRTStrategyCard = ({ symbol, htfFVGs }) => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [loadingCount, setLoadingCount] = useState(0);
+
+  // Check if all 3 HTFs have at least one unmitigated FVG (bullish or bearish)
+  const hasHTFFvgs = ['240', '60', '15'].every(interval => {
+    const data = htfFVGs?.[interval];
+    return data && (data.bullish || data.bearish);
+  });
 
   const handleRefresh = () => {
     if (loadingCount > 0) return;
@@ -52,6 +58,7 @@ const CRTStrategyCard = ({ symbol }) => {
               refreshTrigger={refreshTrigger}
               onLoadStart={handleLoadStart}
               onLoadEnd={handleLoadEnd}
+              disableTrades={!hasHTFFvgs}
             />
           </div>
         ))}
