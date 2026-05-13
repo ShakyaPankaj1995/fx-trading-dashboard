@@ -24,24 +24,24 @@ const EconomicEventsModal = ({ symbol, onClose }) => {
   const relevantEvents = events.filter(e => e.prediction !== null);
 
   return (
-    <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal-content log-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px' }}>
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div className="log-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="log-modal animate-fade-in" style={{ maxWidth: '800px' }}>
+        <div className="log-modal-header">
+          <div className="log-modal-title">
             <Calendar size={24} color="var(--accent-blue)" />
             <div>
               <h2 style={{ margin: 0 }}>Economic Calendar</h2>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              <span className="log-modal-sub">
                 High & Medium Impact Events for {symbol}
-              </p>
+              </span>
             </div>
           </div>
-          <button onClick={onClose} className="modal-close">
-            <X size={20} />
+          <button onClick={onClose} className="log-close-btn">
+            <X size={24} />
           </button>
         </div>
 
-        <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '20px' }}>
+        <div className="log-table-wrapper" style={{ padding: '20px' }}>
           {loading ? (
             <div className="loading-state" style={{ padding: '40px', textAlign: 'center' }}>
               Analyzing global macro events...
@@ -122,8 +122,8 @@ const EconomicEventsModal = ({ symbol, onClose }) => {
           )}
         </div>
         
-        <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', padding: '15px 20px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button className="btn btn-primary" onClick={onClose}>Close Calendar</button>
+        <div className="log-modal-header" style={{ borderTop: '1px solid var(--border-color)', justifyContent: 'flex-end', padding: '12px 20px' }}>
+          <button className="btn btn-primary" onClick={onClose} style={{ fontSize: '0.8rem', padding: '6px 16px' }}>Close Calendar</button>
         </div>
       </div>
     </div>
