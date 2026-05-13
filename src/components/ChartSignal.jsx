@@ -9,7 +9,7 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
   const [signalData, setSignalData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { addSignal } = useSignalLogContext();
+  const { logs, addSignal } = useSignalLogContext();
   const lastLoggedSignalRef = useRef(null);
   const isMountedRef = useRef(true);
 
@@ -103,7 +103,24 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
     return <div className="chart-signal error"><span>{error}</span></div>;
   }
 
-  const { signal, reason, entry, sl, tp, reasoning, setupTime } = signalData;
+  const activeLoggedTrade = logs.find(l => 
+    l.status === 'ACTIVE' && 
+    l.symbol === symbol && 
+    l.timeframe === interval && 
+    l.strategy === (strategyType === 'crt' ? 'CRT (AMD)' : 'Trendline')
+  );
+
+  const displayData = activeLoggedTrade ? {
+    signal: activeLoggedTrade.signal,
+    entry: activeLoggedTrade.entry,
+    sl: activeLoggedTrade.sl,
+    tp: activeLoggedTrade.tp,
+    reason: 'Active Trade Logged',
+    reasoning: ['Trade is currently active and awaiting success or failure.'],
+    setupTime: activeLoggedTrade.setupTime ? new Date(activeLoggedTrade.setupTime).getTime() / 1000 : null
+  } : signalData;
+
+  const { signal, reason, entry, sl, tp, reasoning, setupTime } = displayData;
   const isNeutral = signal === 'NEUTRAL' || signal === 'WAIT';
 
   return (

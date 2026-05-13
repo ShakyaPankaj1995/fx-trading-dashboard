@@ -44,7 +44,7 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [smtStatus, setSmtStatus] = useState(null);
-  const { addSignal } = useSignalLogContext();
+  const { logs, addSignal } = useSignalLogContext();
   const lastLoggedRef = useRef(null);
   const isMountedRef = useRef(true);
 
@@ -264,8 +264,8 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   const isAlignedBearish = inFVGs.length > 0 && allBearish;
 
   // Tick 1
-  const tick1Active = inFVGs.length > 0;
-  const tick1Text = tick1Active 
+  let tick1Active = inFVGs.length > 0;
+  let tick1Text = tick1Active 
     ? `Price in HTF FVG (${inFVGs.map(f => `${f.tf} ${f.type === 'BULL' ? 'Bullish' : 'Bearish'}`).join(', ')})`
     : 'Price not in HTF FVG';
 
@@ -319,6 +319,25 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
      entry = signalData.cisdBearFVG ? signalData.cisdBearFVG.high : cp;
      sl = signalData.sweep.sweepHigh + signalData.atr * 0.1;
      tp = entry - (sl - entry) * 2.5;
+  }
+
+  const activeLoggedTrade = logs?.find(l => 
+    l.status === 'ACTIVE' && 
+    l.symbol === symbol && 
+    l.timeframe === interval && 
+    l.strategy === 'Justin Setup'
+  );
+
+  if (activeLoggedTrade) {
+    finalSignal = activeLoggedTrade.signal;
+    entry = activeLoggedTrade.entry;
+    sl = activeLoggedTrade.sl;
+    tp = activeLoggedTrade.tp;
+    
+    tick1Active = true; tick1Text = 'Price entered HTF FVG (Active Trade)';
+    tick2Active = true; tick2Text = 'Internal Sweep Confirmed (Active Trade)';
+    tick3Active = true; tick3Text = 'SMT Divergence Confirmed (Active Trade)';
+    tick4Active = true; tick4Text = 'CISD Displacement Confirmed (Active Trade)';
   }
 
   const tickStyle = (active) => ({
