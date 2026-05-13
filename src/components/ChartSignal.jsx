@@ -115,8 +115,12 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
     entry: activeLoggedTrade.entry,
     sl: activeLoggedTrade.sl,
     tp: activeLoggedTrade.tp,
-    reason: activeLoggedTrade.reason || 'Active Trade Logged',
-    reasoning: activeLoggedTrade.reasoning || ['Trade is currently active and awaiting success or failure.'],
+    reason: activeLoggedTrade.reason || signalData?.reason || 'Active Trade Logged',
+    reasoning: activeLoggedTrade.reasoning && activeLoggedTrade.reasoning.length > 0 
+      ? activeLoggedTrade.reasoning 
+      : signalData?.reasoning?.length > 0 
+        ? signalData.reasoning 
+        : ['Trade is currently active and awaiting success or failure.'],
     setupTime: activeLoggedTrade.setupTime ? new Date(activeLoggedTrade.setupTime).getTime() / 1000 : null
   } : signalData;
 
