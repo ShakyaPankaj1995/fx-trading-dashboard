@@ -57,7 +57,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
+    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(symbol);
     const chartPrecision = isForex ? 5 : 2;
     const minMove = isForex ? 0.00001 : 0.01;
 
@@ -139,7 +139,6 @@ const TradingViewWidget = ({ symbol, interval }) => {
         let yfSymbol = `${symbol}=X`;
         if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') yfSymbol = 'ES=F';
         else if (symbol === 'NDX' || symbol === 'NASDAQ') yfSymbol = 'NQ=F';
-        else if (symbol === 'BTCUSD' || symbol === 'BTC') yfSymbol = 'BTC-USD';
         else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'GC=F';
 
         const res = await fetch(`/api/finance/v8/finance/chart/${yfSymbol}?interval=${yfInterval}&range=${range}`);

@@ -53,7 +53,7 @@ const LogTable = ({ logs, onSelectSymbol }) => {
         try {
           let ticker = {
             'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X', 'USDJPY': 'USDJPY=X',
-            'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F', 'BTCUSD': 'BTC-USD'
+            'XAUUSD': 'GC=F', 'S&P500': 'ES=F', 'NASDAQ': 'NQ=F'
           }[sym] || `${sym}=X`;
           const res = await fetch(`/api/finance/v8/finance/chart/${ticker}?interval=1m&range=1d`);
           const data = await res.json();
