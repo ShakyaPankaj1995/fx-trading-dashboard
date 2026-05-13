@@ -48,40 +48,33 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   const lastLoggedRef = useRef(null);
   const isMountedRef = useRef(true);
 
+  // --- Step 1: Hooks MUST be at the top ---
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
   const fetchAndAnalyze = async () => {
-    // Don't clear existing data during refresh — keep last state visible
     if (!signalData) setLoading(true);
     setError(null);
     onLoadStart?.();
-
     try {
       let yfInterval = '15m';
       let range = '5d';
       switch (interval) {
         case '240': yfInterval = '60m'; range = '1mo'; break;
-        case '60':  yfInterval = '60m'; range = '5d';  break;  // 1H: shorter range
+        case '60':  yfInterval = '60m'; range = '5d';  break;
         case '15':  yfInterval = '15m'; range = '5d';  break;
         case '5':   yfInterval = '5m';  range = '5d';  break;
       }
-
       const pair = SMT_PAIRS[symbol] || {};
       const primaryTicker = pair.ticker || `${symbol}=X`;
-
       const res = await fetch(`/api/finance/v8/finance/chart/${primaryTicker}?interval=${yfInterval}&range=${range}`);
       if (!res.ok) throw new Error('Data fetch failed');
       const json = await res.json();
       let primaryData = json.chart.result[0];
-
-      // For 4H: aggregate 60m candles into 4H candles
-      if (interval === '240') {
-        primaryData = aggregateRawTo4H(primaryData);
-      }
-
+      if (interval === '240') primaryData = aggregateRawTo4H(primaryData);
+      
       let correlatedData = null;
       if (pair.correlatedTicker) {
         try {
@@ -93,17 +86,13 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
             correlatedData = cd;
             setSmtStatus(`SMT: ${pair.correlatedName} ✓`);
           }
-        } catch (_) {
-          setSmtStatus('SMT: Unavailable');
-        }
+        } catch (_) { setSmtStatus('SMT: Unavailable'); }
       }
 
       const analysis = analyzeJustinSetup(primaryData, correlatedData, interval);
-      
-      if (!isMountedRef.current) return; // Don't update if unmounted
+      if (!isMountedRef.current) return;
       setSignalData(analysis);
 
-      // Report FVG to parent if HTF
       if (interval !== '5' && onUpdateFVG) {
         const activeFVG = analysis.activeBullFVG || analysis.activeBearFVG;
         onUpdateFVG(interval, activeFVG ? { ...activeFVG, type: analysis.activeBullFVG ? 'BULL' : 'BEAR' } : null);
@@ -196,8 +185,115 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     }
   }, [signalData, htfFVGs, interval, symbol, addSignal]);
 
+  // --- Step 2: Calculations based on signalData ---
+  const cp = signalData?.currentPrice;
+  const inFVGs = [];
+  let allBullish = true;
+  let allBearish = true;
 
+  if (signalData && htfFVGs) {
+    Object.entries(htfFVGs).forEach(([tf, fvgs]) => {
+      const label = TIMEFRAME_LABELS[tf] || tf;
+      if (fvgs?.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
+        inFVGs.push({ tf: label, type: 'BULL' });
+        allBearish = false;
+      } else if (fvgs?.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
+        inFVGs.push({ tf: label, type: 'BEAR' });
+        allBullish = false;
+      }
+    });
+  }
 
+  const isAlignedBullish = inFVGs.length > 0 && allBullish;
+  const isAlignedBearish = inFVGs.length > 0 && allBearish;
+
+  let tick1Active = inFVGs.length > 0;
+  let tick1Text = tick1Active 
+    ? `Price in HTF FVG (${inFVGs.map(f => `${f.tf} ${f.type === 'BULL' ? 'Bullish' : 'Bearish'}`).join(', ')})`
+    : 'Price not in HTF FVG';
+
+  let tick2Active = false;
+  let tick2Text = 'Waiting for HTF Alignment';
+  if (isAlignedBullish) {
+    tick2Active = signalData?.sweep?.type === 'BUY_SWEEP';
+    tick2Text = tick2Active ? `Internal Low Swept (${signalData.sweep.sweepLow.toFixed(2)})` : 'Waiting for Internal Low Sweep';
+  } else if (isAlignedBearish) {
+    tick2Active = signalData?.sweep?.type === 'SELL_SWEEP';
+    tick2Text = tick2Active ? `Internal High Swept (${signalData.sweep.sweepHigh.toFixed(2)})` : 'Waiting for Internal High Sweep';
+  }
+
+  let tick3Active = false;
+  let tick3Text = 'Waiting for Sweep to check SMT';
+  if (tick2Active) {
+     if (isAlignedBullish) {
+        tick3Active = signalData?.bullishSMT;
+        tick3Text = tick3Active ? 'Bullish SMT Divergence Confirmed' : 'No Bullish SMT Divergence';
+     } else {
+        tick3Active = signalData?.bearishSMT;
+        tick3Text = tick3Active ? 'Bearish SMT Divergence Confirmed' : 'No Bearish SMT Divergence';
+     }
+  }
+
+  let tick4Active = false;
+  let tick4Text = 'Waiting for CISD';
+  if (tick2Active) {
+     if (isAlignedBullish) {
+        tick4Active = signalData?.bullishCISD;
+        tick4Text = tick4Active ? 'Bullish CISD (Displacement) Confirmed' : 'Waiting for Bullish CISD';
+     } else {
+        tick4Active = signalData?.bearishCISD;
+        tick4Text = tick4Active ? 'Bearish CISD (Displacement) Confirmed' : 'Waiting for Bearish CISD';
+     }
+  }
+
+  let finalSignal = 'NEUTRAL';
+  let entry, sl, tp;
+  if (isAlignedBullish && tick2Active && tick4Active) {
+     finalSignal = 'BUY';
+     entry = signalData?.cisdBullFVG ? signalData.cisdBullFVG.low : cp;
+     sl = signalData?.sweep.sweepLow - signalData?.atr * 0.1;
+     tp = entry + (entry - sl) * 2.5;
+  } else if (isAlignedBearish && tick2Active && tick4Active) {
+     finalSignal = 'SELL';
+     entry = signalData?.cisdBearFVG ? signalData.cisdBearFVG.high : cp;
+     sl = signalData?.sweep.sweepHigh + signalData?.atr * 0.1;
+     tp = entry - (sl - entry) * 2.5;
+  }
+
+  const activeLoggedTrade = logs?.find(l => 
+    l.status === 'ACTIVE' && 
+    l.symbol === symbol && 
+    l.timeframe === interval && 
+    l.strategy === 'Justin Setup'
+  );
+
+  if (activeLoggedTrade) {
+    finalSignal = activeLoggedTrade.signal;
+    entry = activeLoggedTrade.entry;
+    sl = activeLoggedTrade.sl;
+    tp = activeLoggedTrade.tp;
+    const loggedReasoning = activeLoggedTrade.reasoning || [];
+    tick1Active = true; tick1Text = loggedReasoning[0] || 'Price entered HTF FVG (Active Trade)';
+    tick2Active = true; tick2Text = loggedReasoning[1] || 'Internal Sweep Confirmed (Active Trade)';
+    tick3Active = true; tick3Text = loggedReasoning[2] || 'SMT Divergence Confirmed (Active Trade)';
+    tick4Active = true; tick4Text = loggedReasoning[3] || 'CISD Displacement Confirmed (Active Trade)';
+  }
+
+  // Hook 4: Dependent on calculations
+  useEffect(() => {
+    if (signalData && finalSignal !== 'NEUTRAL' && !activeLoggedTrade) {
+      addSignal({
+        symbol, timeframe: interval, strategy: 'Justin Setup',
+        signal: finalSignal, entry, sl, tp,
+        setupTime: signalData.setupTime,
+        currentPrice: cp,
+        reason: `${finalSignal} Signal Identified`,
+        reasoning: [tick1Text, tick2Text, tick3Text, tick4Text]
+      });
+    }
+  }, [finalSignal, activeLoggedTrade, symbol, interval, addSignal, entry, sl, tp, signalData?.setupTime, cp, tick1Text, tick2Text, tick3Text, tick4Text]);
+
+  // --- Step 3: Early returns (ALWAYS AFTER HOOKS) ---
   if (loading && !signalData) {
     return (
       <div className="chart-signal loading">
@@ -215,7 +311,6 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     const bearFVG = signalData.nearestBearFVG;
     const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
     const prec = isForex ? 5 : 2;
-
     return (
       <div className="chart-signal compact neutral" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
         <div className="signal-reason-small" style={{ color: 'var(--text-primary)' }}>Nearest Unmitigated FVGs</div>
@@ -225,139 +320,17 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
                <span style={{ color: 'var(--buy-green)' }}>▲ Bullish</span>
                <span style={{ fontFamily: 'var(--font-mono)' }}>{bullFVG.low.toFixed(prec)} - {bullFVG.high.toFixed(prec)}</span>
              </div>
-          ) : (
-             <div style={{ color: 'var(--text-secondary)' }}>No Bullish FVG</div>
-          )}
+          ) : <div style={{ color: 'var(--text-secondary)' }}>No Bullish FVG</div>}
           {bearFVG ? (
              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                <span style={{ color: 'var(--sell-red)' }}>▼ Bearish</span>
                <span style={{ fontFamily: 'var(--font-mono)' }}>{bearFVG.low.toFixed(prec)} - {bearFVG.high.toFixed(prec)}</span>
              </div>
-          ) : (
-             <div style={{ color: 'var(--text-secondary)' }}>No Bearish FVG</div>
-          )}
+          ) : <div style={{ color: 'var(--text-secondary)' }}>No Bearish FVG</div>}
         </div>
       </div>
     );
   }
-
-  // --- 5M Logic ---
-  const cp = signalData.currentPrice;
-  const inFVGs = [];
-  let allBullish = true;
-  let allBearish = true;
-
-  if (htfFVGs) {
-    Object.entries(htfFVGs).forEach(([tf, fvgs]) => {
-      const label = TIMEFRAME_LABELS[tf] || tf;
-      if (fvgs?.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
-        inFVGs.push({ tf: label, type: 'BULL' });
-        allBearish = false;
-      } else if (fvgs?.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
-        inFVGs.push({ tf: label, type: 'BEAR' });
-        allBullish = false;
-      }
-    });
-  }
-
-  const isAlignedBullish = inFVGs.length > 0 && allBullish;
-  const isAlignedBearish = inFVGs.length > 0 && allBearish;
-
-  // Tick 1
-  let tick1Active = inFVGs.length > 0;
-  let tick1Text = tick1Active 
-    ? `Price in HTF FVG (${inFVGs.map(f => `${f.tf} ${f.type === 'BULL' ? 'Bullish' : 'Bearish'}`).join(', ')})`
-    : 'Price not in HTF FVG';
-
-  // Tick 2
-  let tick2Active = false;
-  let tick2Text = 'Waiting for HTF Alignment';
-  if (isAlignedBullish) {
-    tick2Active = signalData.sweep?.type === 'BUY_SWEEP';
-    tick2Text = tick2Active ? `Internal Low Swept (${signalData.sweep.sweepLow.toFixed(2)})` : 'Waiting for Internal Low Sweep';
-  } else if (isAlignedBearish) {
-    tick2Active = signalData.sweep?.type === 'SELL_SWEEP';
-    tick2Text = tick2Active ? `Internal High Swept (${signalData.sweep.sweepHigh.toFixed(2)})` : 'Waiting for Internal High Sweep';
-  }
-
-  // Tick 3
-  let tick3Active = false;
-  let tick3Text = 'Waiting for Sweep to check SMT';
-  if (tick2Active) {
-     if (isAlignedBullish) {
-        tick3Active = signalData.bullishSMT;
-        tick3Text = tick3Active ? 'Bullish SMT Divergence Confirmed' : 'No Bullish SMT Divergence';
-     } else {
-        tick3Active = signalData.bearishSMT;
-        tick3Text = tick3Active ? 'Bearish SMT Divergence Confirmed' : 'No Bearish SMT Divergence';
-     }
-  }
-
-  // Tick 4
-  let tick4Active = false;
-  let tick4Text = 'Waiting for CISD';
-  if (tick2Active) {
-     if (isAlignedBullish) {
-        tick4Active = signalData.bullishCISD;
-        tick4Text = tick4Active ? 'Bullish CISD (Displacement) Confirmed' : 'Waiting for Bullish CISD';
-     } else {
-        tick4Active = signalData.bearishCISD;
-        tick4Text = tick4Active ? 'Bearish CISD (Displacement) Confirmed' : 'Waiting for Bearish CISD';
-     }
-  }
-
-  // Final Signal
-  let finalSignal = 'NEUTRAL';
-  let entry, sl, tp;
-  if (isAlignedBullish && tick2Active && tick4Active) {
-     finalSignal = 'BUY';
-     entry = signalData.cisdBullFVG ? signalData.cisdBullFVG.low : cp;
-     sl = signalData.sweep.sweepLow - signalData.atr * 0.1;
-     tp = entry + (entry - sl) * 2.5;
-  } else if (isAlignedBearish && tick2Active && tick4Active) {
-     finalSignal = 'SELL';
-     entry = signalData.cisdBearFVG ? signalData.cisdBearFVG.high : cp;
-     sl = signalData.sweep.sweepHigh + signalData.atr * 0.1;
-     tp = entry - (sl - entry) * 2.5;
-  }
-
-  const activeLoggedTrade = logs?.find(l => 
-    l.status === 'ACTIVE' && 
-    l.symbol === symbol && 
-    l.timeframe === interval && 
-    l.strategy === 'Justin Setup'
-  );
-
-  if (activeLoggedTrade) {
-    finalSignal = activeLoggedTrade.signal;
-    entry = activeLoggedTrade.entry;
-    sl = activeLoggedTrade.sl;
-    tp = activeLoggedTrade.tp;
-    
-    const loggedReasoning = activeLoggedTrade.reasoning || [];
-    tick1Active = true; tick1Text = loggedReasoning[0] || 'Price entered HTF FVG (Active Trade)';
-    tick2Active = true; tick2Text = loggedReasoning[1] || 'Internal Sweep Confirmed (Active Trade)';
-    tick3Active = true; tick3Text = loggedReasoning[2] || 'SMT Divergence Confirmed (Active Trade)';
-    tick4Active = true; tick4Text = loggedReasoning[3] || 'CISD Displacement Confirmed (Active Trade)';
-  }
-
-  useEffect(() => {
-    if (finalSignal !== 'NEUTRAL' && !activeLoggedTrade) {
-      addSignal({
-        symbol,
-        timeframe: interval,
-        strategy: 'Justin Setup',
-        signal: finalSignal,
-        entry,
-        sl,
-        tp,
-        setupTime: signalData.setupTime,
-        currentPrice: cp,
-        reason: `${finalSignal} Signal Identified`,
-        reasoning: [tick1Text, tick2Text, tick3Text, tick4Text]
-      });
-    }
-  }, [finalSignal, activeLoggedTrade, symbol, interval, addSignal, entry, sl, tp, signalData.setupTime, cp, tick1Text, tick2Text, tick3Text, tick4Text]);
 
   const tickStyle = (active) => ({
     display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem',
@@ -371,26 +344,17 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
           {finalSignal === 'BUY' ? <TrendingUp size={10}/> : finalSignal === 'SELL' ? <TrendingDown size={10}/> : null}
           {' '}Justin {finalSignal}
         </div>
-        
         <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
-          <div style={tickStyle(tick1Active)}>
-            {tick1Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
-            <span>01. {tick1Text}</span>
-          </div>
-          <div style={tickStyle(tick2Active)}>
-            {tick2Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
-            <span>02. {tick2Text}</span>
-          </div>
-          <div style={tickStyle(tick3Active)}>
-            {tick3Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
-            <span>03. {tick3Text}</span>
-          </div>
-          <div style={tickStyle(tick4Active)}>
-            {tick4Active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
-            <span>04. {tick4Text}</span>
-          </div>
+          {[tick1Text, tick2Text, tick3Text, tick4Text].map((text, i) => {
+            const active = [tick1Active, tick2Active, tick3Active, tick4Active][i];
+            return (
+              <div key={i} style={tickStyle(active)}>
+                {active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+                <span>0{i+1}. {text}</span>
+              </div>
+            );
+          })}
         </div>
-
         {finalSignal !== 'NEUTRAL' && (
           <div className="signal-prices" style={{ marginTop: '8px' }}>
             <div className="price-item">
