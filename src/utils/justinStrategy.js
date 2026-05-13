@@ -84,8 +84,8 @@ function detectSweep(highs, lows, closes, lookback = 30) {
     swingHigh = Math.max(swingHigh, highs[i]);
   }
 
-  // Check the last few candles for a sweep
-  for (let i = len - 3; i < len; i++) {
+  // Check the last few candles for a sweep (ignoring the ongoing live candle at len-1)
+  for (let i = len - 3; i < len - 1; i++) {
     const sweptDown = lows[i] < swingLow && closes[i] > swingLow;
     const sweptUp   = highs[i] > swingHigh && closes[i] < swingHigh;
 
@@ -113,11 +113,11 @@ function detectCISD(highs, lows, closes, opens, lookback = 10) {
     recentStructureLow  = Math.min(recentStructureLow,  lows[i]);
   }
 
-  // Check last 3 candles for impulsive move
+  // Check last 2 closed candles for impulsive move (ignoring live candle at len-1)
   let bullishCount = 0;
   let bearishCount = 0;
 
-  for (let i = len - 3; i < len; i++) {
+  for (let i = len - 3; i < len - 1; i++) {
     const body = Math.abs(closes[i] - opens[i]);
     const range = highs[i] - lows[i];
     const isBullish = closes[i] > opens[i] && body > range * 0.6;
@@ -127,8 +127,8 @@ function detectCISD(highs, lows, closes, opens, lookback = 10) {
     if (isBearish) bearishCount++;
   }
 
-  const bullishCISD = bullishCount >= 2 && closes[len - 1] > recentStructureHigh;
-  const bearishCISD = bearishCount >= 2 && closes[len - 1] < recentStructureLow;
+  const bullishCISD = bullishCount >= 1 && closes[len - 2] > recentStructureHigh;
+  const bearishCISD = bearishCount >= 1 && closes[len - 2] < recentStructureLow;
 
   // Find the FVG left by the CISD move
   const cisdBullFVG = bullishCISD ? {
@@ -155,20 +155,20 @@ function checkSMTDivergence(primaryLows, primaryHighs, correlatedLows, correlate
   const pLen = primaryLows.length;
   const cLen = correlatedLows.length;
 
-  const pRecentLow  = Math.min(...primaryLows.slice(Math.max(0, pLen - lookback)));
-  const pPrevLow    = Math.min(...primaryLows.slice(Math.max(0, pLen - lookback * 2), pLen - lookback));
-  const cRecentLow  = Math.min(...correlatedLows.slice(Math.max(0, cLen - lookback)));
-  const cPrevLow    = Math.min(...correlatedLows.slice(Math.max(0, cLen - lookback * 2), cLen - lookback));
+  const pRecentLow  = Math.min(...primaryLows.slice(Math.max(0, pLen - lookback), pLen - 1));
+  const pPrevLow    = Math.min(...primaryLows.slice(Math.max(0, pLen - lookback * 2), pLen - lookback - 1));
+  const cRecentLow  = Math.min(...correlatedLows.slice(Math.max(0, cLen - lookback), cLen - 1));
+  const cPrevLow    = Math.min(...correlatedLows.slice(Math.max(0, cLen - lookback * 2), cLen - lookback - 1));
 
-  const pRecentHigh = Math.max(...primaryHighs.slice(Math.max(0, pLen - lookback)));
-  const pPrevHigh   = Math.max(...primaryHighs.slice(Math.max(0, pLen - lookback * 2), pLen - lookback));
-  const cRecentHigh = Math.max(...correlatedHighs.slice(Math.max(0, cLen - lookback)));
-  const cPrevHigh   = Math.max(...correlatedHighs.slice(Math.max(0, cLen - lookback * 2), cLen - lookback));
+  const pRecentHigh = Math.max(...primaryHighs.slice(Math.max(0, pLen - lookback), pLen - 1));
+  const pPrevHigh   = Math.max(...primaryHighs.slice(Math.max(0, pLen - lookback * 2), pLen - lookback - 1));
+  const cRecentHigh = Math.max(...correlatedHighs.slice(Math.max(0, cLen - lookback), cLen - 1));
+  const cPrevHigh   = Math.max(...correlatedHighs.slice(Math.max(0, cLen - lookback * 2), cLen - lookback - 1));
 
-  // Bullish SMT: Primary made lower low, correlated did NOT
+  // Bullish SMT: Primary made lower low, correlated did NOT (excluding live candles)
   const bullishSMT = pRecentLow < pPrevLow && cRecentLow >= cPrevLow;
 
-  // Bearish SMT: Primary made higher high, correlated did NOT
+  // Bearish SMT: Primary made higher high, correlated did NOT (excluding live candles)
   const bearishSMT = pRecentHigh > pPrevHigh && cRecentHigh <= cPrevHigh;
 
   return { bullishSMT, bearishSMT };

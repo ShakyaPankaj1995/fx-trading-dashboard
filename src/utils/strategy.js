@@ -76,7 +76,8 @@ export function analyzeData(data, intervalStr) {
   const ph = []; 
   const pl = []; 
 
-  for (let i = pivotLength; i < pricesHigh.length - pivotLength; i++) {
+  // We look up to pricesHigh.length - pivotLength - 1 to ignore the ongoing live candle
+  for (let i = pivotLength; i < pricesHigh.length - pivotLength - 1; i++) {
     let isPh = true;
     let isPl = true;
     for (let j = 1; j <= pivotLength; j++) {
@@ -304,7 +305,12 @@ export function analyzeCRTData(data, intervalStr) {
      return { signal: 'WAIT', reason: 'Insufficient data' };
   }
 
-  // Scan the last 10 candles for the CRT pattern
+  // Scan the last 10 candles for the CRT pattern. 
+  // We start at length - 3 to ensure C3 (the confirmation candle) is a fully closed candle.
+  // (length-1 is live, length-2 is most recent closed, so c3 at length-3 is very safe)
+  // Actually, length-2 is the most recent closed candle. So i = pricesHigh.length - 2 is fine.
+  // Let's check: if i = length - 2, then c3 is index length - 2. 
+  // Since index length - 1 is the live candle, index length - 2 is the most recently closed one.
   for (let i = pricesHigh.length - 2; i >= pricesHigh.length - 10; i--) {
     const c1High = pricesHigh[i - 2];
     const c1Low = pricesLow[i - 2];

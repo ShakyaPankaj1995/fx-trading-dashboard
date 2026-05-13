@@ -125,6 +125,8 @@ export function useSignalLog() {
         sl: slVal,
         tp: tpVal,
         rr,
+        reason: signal.reason || null,
+        reasoning: signal.reasoning || null,
         status: 'ACTIVE',
         closedAt: null,
         closePrice: null,

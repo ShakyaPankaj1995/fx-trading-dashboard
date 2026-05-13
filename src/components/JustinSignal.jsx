@@ -334,11 +334,30 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     sl = activeLoggedTrade.sl;
     tp = activeLoggedTrade.tp;
     
-    tick1Active = true; tick1Text = 'Price entered HTF FVG (Active Trade)';
-    tick2Active = true; tick2Text = 'Internal Sweep Confirmed (Active Trade)';
-    tick3Active = true; tick3Text = 'SMT Divergence Confirmed (Active Trade)';
-    tick4Active = true; tick4Text = 'CISD Displacement Confirmed (Active Trade)';
+    const loggedReasoning = activeLoggedTrade.reasoning || [];
+    tick1Active = true; tick1Text = loggedReasoning[0] || 'Price entered HTF FVG (Active Trade)';
+    tick2Active = true; tick2Text = loggedReasoning[1] || 'Internal Sweep Confirmed (Active Trade)';
+    tick3Active = true; tick3Text = loggedReasoning[2] || 'SMT Divergence Confirmed (Active Trade)';
+    tick4Active = true; tick4Text = loggedReasoning[3] || 'CISD Displacement Confirmed (Active Trade)';
   }
+
+  useEffect(() => {
+    if (finalSignal !== 'NEUTRAL' && !activeLoggedTrade) {
+      addSignal({
+        symbol,
+        timeframe: interval,
+        strategy: 'Justin Setup',
+        signal: finalSignal,
+        entry,
+        sl,
+        tp,
+        setupTime: signalData.setupTime,
+        currentPrice: cp,
+        reason: `${finalSignal} Signal Identified`,
+        reasoning: [tick1Text, tick2Text, tick3Text, tick4Text]
+      });
+    }
+  }, [finalSignal, activeLoggedTrade, symbol, interval, addSignal, entry, sl, tp, signalData.setupTime, cp, tick1Text, tick2Text, tick3Text, tick4Text]);
 
   const tickStyle = (active) => ({
     display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem',
