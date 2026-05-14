@@ -60,9 +60,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(symbol);
-    const chartPrecision = isForex ? 5 : 2;
-    const minMove = isForex ? 0.00001 : 0.01;
+    const isForex = !['GOLD', 'XAUUSD', 'GC=F', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'ES=F', 'NQ=F'].includes(symbol);
+    const chartPrecision = symbol.includes('JPY') ? 3 : isForex ? 5 : 2;
+    const minMove = 1 / Math.pow(10, chartPrecision);
 
     // Initialize Chart
     const chart = createChart(chartContainerRef.current, {
@@ -79,9 +79,6 @@ const TradingViewWidget = ({ symbol, interval }) => {
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
-      },
-      localization: {
-        priceFormatter: p => p.toFixed(chartPrecision),
       },
     });
 
