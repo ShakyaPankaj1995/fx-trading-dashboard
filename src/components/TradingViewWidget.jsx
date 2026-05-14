@@ -186,7 +186,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
         window.fvgSeriesPool = [];
 
         const drawFVGBox = (fvg, isBull, isMitigated, isActive) => {
-          if (!fvg) return;
+          if (!fvg || isNaN(fvg.high) || isNaN(fvg.low)) return;
+          
           const series = chart.addCandlestickSeries({
             upColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
             downColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
@@ -202,12 +203,17 @@ const TradingViewWidget = ({ symbol, interval }) => {
             .filter(d => d.time >= fvg.time)
             .map(d => ({
               time: d.time,
-              open: fvg.high, close: fvg.low,
-              high: fvg.high, low: fvg.low,
-            }));
+              open: Number(fvg.high), close: Number(fvg.low),
+              high: Number(fvg.high), low: Number(fvg.low),
+            }))
+            .filter(d => !isNaN(d.open) && !isNaN(d.close));
             
-          series.setData(boxData);
-          window.fvgSeriesPool.push(series);
+          if (boxData.length > 0) {
+            series.setData(boxData);
+            window.fvgSeriesPool.push(series);
+          } else {
+            chart.removeSeries(series);
+          }
         };
 
         // Draw only the "Mentioned" FVGs
@@ -223,35 +229,47 @@ const TradingViewWidget = ({ symbol, interval }) => {
 
         if (activeTrade && candleSeries) {
           try {
-            // No need to cleanup old lines from candleSeries because the series is NEW
-            // Just clear the reference array
-            priceLinesRef.current = [];
+            const entry = Number(activeTrade.entry);
+            const tp = Number(activeTrade.tp);
+            const sl = Number(activeTrade.sl);
 
-            const entryLine = candleSeries.createPriceLine({
-              price: Number(activeTrade.entry),
-              color: 'var(--accent-blue)',
-              lineWidth: 2,
-              lineStyle: 0,
-              axisLabelVisible: true,
-              title: 'ENTRY',
-            });
-            const tpLine = candleSeries.createPriceLine({
-              price: Number(activeTrade.tp),
-              color: 'var(--buy-green)',
-              lineWidth: 2,
-              lineStyle: 1,
-              axisLabelVisible: true,
-              title: 'TP',
-            });
-            const slLine = candleSeries.createPriceLine({
-              price: Number(activeTrade.sl),
-              color: 'var(--sell-red)',
-              lineWidth: 2,
-              lineStyle: 1,
-              axisLabelVisible: true,
-              title: 'SL',
-            });
-            priceLinesRef.current = [entryLine, tpLine, slLine];
+            if (!isNaN(entry) && entry > 0) {
+              priceLinesRef.current = [];
+
+              const entryLine = candleSeries.createPriceLine({
+                price: entry,
+                color: 'var(--accent-blue)',
+                lineWidth: 2,
+                lineStyle: 0,
+                axisLabelVisible: true,
+                title: 'ENTRY',
+              });
+              priceLinesRef.current.push(entryLine);
+
+              if (!isNaN(tp) && tp > 0) {
+                const tpLine = candleSeries.createPriceLine({
+                  price: tp,
+                  color: 'var(--buy-green)',
+                  lineWidth: 2,
+                  lineStyle: 1,
+                  axisLabelVisible: true,
+                  title: 'TP',
+                });
+                priceLinesRef.current.push(tpLine);
+              }
+
+              if (!isNaN(sl) && sl > 0) {
+                const slLine = candleSeries.createPriceLine({
+                  price: sl,
+                  color: 'var(--sell-red)',
+                  lineWidth: 2,
+                  lineStyle: 1,
+                  axisLabelVisible: true,
+                  title: 'SL',
+                });
+                priceLinesRef.current.push(slLine);
+              }
+            }
           } catch (e) {
             console.error('[Chart] Failed to draw trade lines:', e.message);
           }
