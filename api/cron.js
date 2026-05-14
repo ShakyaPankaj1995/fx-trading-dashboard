@@ -15,9 +15,9 @@ const ASSETS = [
   { name: 'EURUSD', ticker: 'EURUSD=X' },
   { name: 'GBPUSD', ticker: 'GBPUSD=X' },
   { name: 'USDJPY', ticker: 'USDJPY=X' },
-  { name: 'XAUUSD', ticker: 'XAUUSD=X' },
-  { name: 'S&P500', ticker: '^GSPC' },
-  { name: 'NASDAQ', ticker: '^IXIC' }
+  { name: 'XAUUSD', ticker: 'GC=F' },
+  { name: 'S&P500', ticker: 'ES=F' },
+  { name: 'NASDAQ', ticker: 'NQ=F' }
 ];
 
 const TIMEFRAMES = [
@@ -113,15 +113,10 @@ export default async function handler(req, res) {
           }
 
           // Run Justin Setup (with SMT correlated asset)
-          let yfSymbol = `${asset.name}=X`;
-          if (asset.name === 'SPX' || asset.name === 'S&P500' || asset.name === 'SP500') yfSymbol = '^GSPC';
-          else if (asset.name === 'NDX' || asset.name === 'NASDAQ') yfSymbol = '^IXIC';
-          else if (asset.name === 'XAUUSD' || asset.name === 'GOLD') yfSymbol = 'XAUUSD=X';
-          
           const smtPairs = {
-            'NASDAQ': '^GSPC', 'S&P500': '^IXIC',
+            'NASDAQ': 'ES=F', 'S&P500': 'NQ=F',
             'EURUSD': 'GBPUSD=X', 'GBPUSD': 'EURUSD=X',
-            'XAUUSD': 'XAGUSD=X',
+            'XAUUSD': 'SI=F',
           };
           let correlatedData = null;
           const correlatedTicker = smtPairs[asset.name];

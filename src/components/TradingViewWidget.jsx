@@ -52,6 +52,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
   const chartRef = useRef();
   const fvgDimSeriesRef = useRef();
   const fvgHighlightSeriesRef = useRef();
+  const priceLinesRef = useRef([]);
   const { logs } = useSignalLogContext();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,9 +60,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const isForex = !['GOLD', 'XAUUSD', 'GC=F', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'ES=F', 'NQ=F'].includes(symbol);
-    const chartPrecision = symbol.includes('JPY') ? 3 : isForex ? 5 : 2;
-    const minMove = 1 / Math.pow(10, chartPrecision);
+    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(symbol);
+    const chartPrecision = isForex ? 5 : 2;
+    const minMove = isForex ? 0.00001 : 0.01;
 
     // Initialize Chart
     const chart = createChart(chartContainerRef.current, {
@@ -78,6 +79,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+      },
+      localization: {
+        priceFormatter: p => p.toFixed(chartPrecision),
       },
     });
 
@@ -117,6 +121,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
     });
 
     chartRef.current = chart;
+    priceLinesRef.current = []; // Reset local memory for this new chart instance
     let isMounted = true;
 
     const fetchData = async () => {
@@ -136,9 +141,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
         }
 
         let yfSymbol = `${symbol}=X`;
-        if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') yfSymbol = '^GSPC';
-        else if (symbol === 'NDX' || symbol === 'NASDAQ') yfSymbol = '^IXIC';
-        else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'XAUUSD=X';
+        if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') yfSymbol = 'ES=F';
+        else if (symbol === 'NDX' || symbol === 'NASDAQ') yfSymbol = 'NQ=F';
+        else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'GC=F';
 
         const res = await fetch(`/api/finance/v8/finance/chart/${yfSymbol}?interval=${yfInterval}&range=${range}`);
         if (!isMounted) return;
@@ -217,8 +222,52 @@ const TradingViewWidget = ({ symbol, interval }) => {
         if (recentMitBull[0]) drawFVGBox(recentMitBull[0], true, true, false);
         if (recentMitBear[0]) drawFVGBox(recentMitBear[0], false, true, false);
 
+        // --- Active Trade Price Lines (Ultra-Safe decoupled version) ---
+        setTimeout(() => {
+          if (!isMounted || !candleSeries) return;
+          const activeTrade = logs?.find(l => 
+            l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
+          );
+
+          if (activeTrade) {
+            try {
+              const currentPrice = formattedData[formattedData.length - 1].close;
+              const entry = Number(activeTrade.entry);
+              const tp = Number(activeTrade.tp);
+              const sl = Number(activeTrade.sl);
+
+              // Only draw if within 25% of current price to prevent chart scaling crashes
+              const limit = currentPrice * 0.25;
+              const safe = (p) => !isNaN(p) && p > 0 && Math.abs(p - currentPrice) < limit;
+
+              if (safe(entry)) {
+                // Clear any existing lines for this ref
+                priceLinesRef.current.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e) {} });
+                priceLinesRef.current = [];
+
+                const eLine = candleSeries.createPriceLine({
+                  price: entry, color: 'var(--accent-blue)', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'ENTRY'
+                });
+                priceLinesRef.current.push(eLine);
+
+                if (safe(tp)) {
+                  priceLinesRef.current.push(candleSeries.createPriceLine({
+                    price: tp, color: 'var(--buy-green)', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'TP'
+                  }));
+                }
+                if (safe(sl)) {
+                  priceLinesRef.current.push(candleSeries.createPriceLine({
+                    price: sl, color: 'var(--sell-red)', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'SL'
+                  }));
+                }
+              }
+            } catch (err) {
+              console.error('[Chart] Price line drawing failed:', err.message);
+            }
+          }
+        }, 100);
+
         // Analysis for Trendline / CRT / Justin
-        // ... (existing analysis logic) ...
         const trendSignal = analyzeData(analysisData, interval);
         const crtSignal = analyzeCRTData(analysisData, interval);
         
@@ -280,13 +329,12 @@ const TradingViewWidget = ({ symbol, interval }) => {
 
     return () => {
       isMounted = false;
-      clearInterval(intervalId);
       resizeObserver.disconnect();
       try { chart.remove(); } catch(e) {}
       fvgDimSeriesRef.current = null;
       fvgHighlightSeriesRef.current = null;
     };
-  }, [symbol, interval]);
+  }, [symbol, interval, logs]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
