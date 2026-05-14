@@ -65,16 +65,45 @@ export default async function handler(req, res) {
     // 1. Cleanup old logs (older than 30 days)
     logs = logs.filter(log => new Date(log.timestamp).getTime() > thirtyDaysAgo);
 
+    // 1. Fetch News Events to apply filter
+    let newsEvents = [];
+    try {
+      newsEvents = await new Promise((resolve, reject) => {
+        https.get('https://nfs.faireconomy.media/ff_calendar_thisweek.json', { headers: { 'User-Agent': 'Mozilla/5.0' } }, (response) => {
+          let d = '';
+          response.on('data', chunk => d += chunk);
+          response.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve([]); } });
+        }).on('error', () => resolve([]));
+      });
+    } catch (e) {}
+
+    const isNewsRestricted = (symbol, currentTime) => {
+      const currencies = {
+        'EURUSD': ['EUR', 'USD'], 'GBPUSD': ['GBP', 'USD'], 'USDJPY': ['USD', 'JPY'],
+        'XAUUSD': ['USD'], 'S&P500': ['USD'], 'NASDAQ': ['USD']
+      }[symbol] || [];
+      
+      return newsEvents.some(event => {
+        if (!currencies.includes(event.country)) return false;
+        if (event.impact !== 'High' && event.impact !== 'Medium') return false;
+        
+        const eventTime = new Date(event.date).getTime();
+        const buffer = 30 * 60 * 1000; // 30 mins
+        return currentTime >= (eventTime - buffer) && currentTime <= (eventTime + buffer);
+      });
+    };
+
     // 2. Identify new signals
     for (const asset of ASSETS) {
       for (const tf of TIMEFRAMES) {
         try {
           const chartData = await fetchYF(asset.ticker, tf.yf, tf.range);
-          
-          // Run Trendline Strategy
-          const trendAnalysis = analyzeData(chartData, tf.val);
-          if (trendAnalysis.signal === 'BUY' || trendAnalysis.signal === 'SELL') {
-            logs = addLogIfNew(logs, asset.name, tf.val, 'Trendline', trendAnalysis);
+          const currentTime = Date.now();
+
+          // NEWS FILTER: Skip if within 30 mins of high/medium impact news
+          if (isNewsRestricted(asset.name, currentTime)) {
+            console.log(`[Cron] Skipping ${asset.name} due to News Restriction`);
+            continue;
           }
 
           // Run CRT Strategy

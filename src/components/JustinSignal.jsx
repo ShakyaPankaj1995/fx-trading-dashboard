@@ -312,8 +312,12 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     const recentMitBull = signalData.recentMitigatedBull || [];
     const recentMitBear = signalData.recentMitigatedBear || [];
     
-    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
-    const prec = isForex ? 5 : 2;
+    const getPrec = (s) => {
+      if (['GOLD', 'XAUUSD', 'GC=F', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'ES=F', 'NQ=F', 'BTCUSD', 'BTC'].includes(s)) return 2;
+      if (s.includes('JPY')) return 3;
+      return 5;
+    };
+    const prec = getPrec(symbol);
 
     return (
       <div className="chart-signal compact neutral" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>

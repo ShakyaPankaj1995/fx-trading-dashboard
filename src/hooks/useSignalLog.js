@@ -59,9 +59,28 @@ export function useSignalLog() {
   }, []);
 
   // --- Add Signal with strong dedup ---
-  const addSignal = useCallback((signal) => {
+  const addSignal = useCallback(async (signal) => {
+    // 1. News Event Restriction Check (Async, outside setLogs)
+    try {
+      const res = await fetch(`/api/events?symbol=${signal.symbol}`);
+      if (res.ok) {
+        const events = await res.json();
+        const nowTime = Date.now();
+        const buffer = 30 * 60 * 1000;
+        const hasNews = events.some(e => {
+          const et = new Date(e.date).getTime();
+          return nowTime >= (et - buffer) && nowTime <= (et + buffer);
+        });
+        if (hasNews) {
+          console.warn(`[SignalLog] Blocked ${signal.symbol} signal due to high/medium impact news event.`);
+          alert(`⚠️ News Warning: Signal for ${signal.symbol} blocked due to upcoming/recent High/Medium impact news.`);
+          return;
+        }
+      }
+    } catch (e) { /* fallback: proceed if news check fails */ }
+
     setLogs(prev => {
-      // 1. Don't log if an ACTIVE trade exists for same symbol+timeframe+strategy+direction
+      // 2. Don't log if an ACTIVE trade exists for same symbol+timeframe+strategy+direction
       const hasActiveMatch = prev.some(log =>
         log.symbol === signal.symbol &&
         log.timeframe === signal.timeframe &&
