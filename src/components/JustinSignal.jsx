@@ -337,25 +337,29 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
         </div>
 
         {/* Recently Mitigated Section */}
-        {(recentMitBull.length > 0 || recentMitBear.length > 0) && (
-          <div style={{ width: '100%', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px' }}>
-            <div className="signal-reason-small" style={{ color: 'var(--text-secondary)', marginBottom: '4px', fontSize: '0.65rem' }}>Recently Mitigated</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7rem', width: '100%' }}>
-              {recentMitBull.slice(0, 3).map((f, i) => (
-                <div key={`rmb-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--buy-green)' }}>△ Bullish</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
-                </div>
-              ))}
-              {recentMitBear.slice(0, 3).map((f, i) => (
-                <div key={`rmr-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--sell-red)' }}>▽ Bearish</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
-                </div>
-              ))}
-            </div>
+        <div style={{ width: '100%', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px' }}>
+          <div className="signal-reason-small" style={{ color: 'var(--text-secondary)', marginBottom: '4px', fontSize: '0.65rem' }}>Recently Mitigated</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7rem', width: '100%' }}>
+            {recentMitBull.length === 0 && recentMitBear.length === 0 ? (
+              <div style={{ color: 'var(--text-secondary)', opacity: 0.5, fontSize: '0.65rem' }}>No recent mitigations</div>
+            ) : (
+              <>
+                {recentMitBull.slice(0, 3).map((f, i) => (
+                  <div key={`rmb-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--buy-green)' }}>△ Bullish</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
+                  </div>
+                ))}
+                {recentMitBear.slice(0, 3).map((f, i) => (
+                  <div key={`rmr-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--sell-red)' }}>▽ Bearish</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   }
