@@ -326,25 +326,6 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
             >
               Scan Market
             </button>
-            <button 
-              onClick={() => {
-                const testSignal = {
-                  symbol: 'EURUSD',
-                  timeframe: '15',
-                  strategy: 'CRT (AMD)',
-                  signal: 'BUY',
-                  entry: 1.0850,
-                  sl: 1.0820,
-                  tp: 1.0910,
-                  setupTime: Math.floor(Date.now() / 1000)
-                };
-                addSignal(testSignal);
-              }} 
-              className="btn btn-outline" 
-              style={{ fontSize: '0.75rem', padding: '4px 8px', borderColor: 'var(--buy-green)', color: 'var(--buy-green)' }}
-            >
-              + Add Test
-            </button>
             <button onClick={clearLogs} className="btn btn-outline log-clear-btn">
               <Trash2 size={13}/> Clear
             </button>

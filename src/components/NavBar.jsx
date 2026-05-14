@@ -11,7 +11,7 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog, onOpenEvents }) => {
     <nav className="navbar">
       <a href="/" className="nav-brand">
         <LineChart className="nav-brand-icon" size={28} />
-        <span>FX Master <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>v1.2.6</small></span>
+        <span>FX Master <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>v1.2.7</small></span>
       </a>
 
       <div className="nav-controls" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -28,26 +28,6 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog, onOpenEvents }) => {
 
         <div style={{ width: '1px', height: '24px', background: 'var(--border-color)', margin: '0 4px' }} />
 
-        <button
-          onClick={() => {
-            onSymbolAdd('EURUSD');
-            addSignal({
-              symbol: 'EURUSD',
-              timeframe: '15',
-              strategy: 'CRT (AMD)',
-              signal: 'BUY',
-              entry: 1.0850,
-              sl: 1.0820,
-              tp: 1.0910,
-              setupTime: Math.floor(Date.now() / 1000)
-            });
-            alert('Test Signal Added for EURUSD 15M! Looking at the 15M chart now.');
-          }}
-          className="btn btn-outline"
-          style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', color: 'var(--buy-green)', borderColor: 'var(--buy-green)' }}
-        >
-          + Test Setup
-        </button>
 
         <button
           onClick={onOpenEvents}
