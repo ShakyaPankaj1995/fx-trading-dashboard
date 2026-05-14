@@ -242,10 +242,14 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
   const { logs, clearLogs, addSignal } = useSignalLogContext();
   const [activeTab, setActiveTab] = useState('all');
 
-  const filteredLogs = useMemo(() =>
-    activeTab === 'all' ? logs : logs.filter(l => l.strategy === activeTab),
-    [logs, activeTab]
-  );
+  const filteredLogs = useMemo(() => {
+    const base = activeTab === 'all' ? logs : logs.filter(l => l.strategy === activeTab);
+    return [...base].sort((a, b) => {
+      if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+      if (a.status !== 'ACTIVE' && b.status === 'ACTIVE') return 1;
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
+  }, [logs, activeTab]);
 
   const stats = useMemo(() => calcStats(filteredLogs), [filteredLogs]);
 
