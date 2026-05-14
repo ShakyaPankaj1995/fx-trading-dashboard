@@ -340,17 +340,17 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
         {(recentMitBull.length > 0 || recentMitBear.length > 0) && (
           <div style={{ width: '100%', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px' }}>
             <div className="signal-reason-small" style={{ color: 'var(--text-secondary)', marginBottom: '4px', fontSize: '0.65rem' }}>Recently Mitigated</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7rem', width: '100%', opacity: 0.8 }}>
-              {recentMitBull.slice(0, 2).map((f, i) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7rem', width: '100%' }}>
+              {recentMitBull.slice(0, 3).map((f, i) => (
                 <div key={`rmb-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--buy-green)', opacity: 0.7 }}>△ Bullish</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
+                  <span style={{ color: 'var(--buy-green)' }}>△ Bullish</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
                 </div>
               ))}
-              {recentMitBear.slice(0, 2).map((f, i) => (
+              {recentMitBear.slice(0, 3).map((f, i) => (
                 <div key={`rmr-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--sell-red)', opacity: 0.7 }}>▽ Bearish</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
+                  <span style={{ color: 'var(--sell-red)' }}>▽ Bearish</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
                 </div>
               ))}
             </div>

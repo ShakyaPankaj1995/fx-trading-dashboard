@@ -196,8 +196,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
               downColor: 'rgba(0, 0, 0, 0)',
               borderVisible: true, wickVisible: false,
               lastValueVisible: false, priceLineVisible: false,
-              borderUpColor: 'rgba(14, 203, 129, 0.6)',
-              borderDownColor: 'rgba(246, 70, 93, 0.6)',
+              borderUpColor: 'rgba(102, 255, 0, 0.8)',
+              borderDownColor: 'rgba(238, 75, 43, 0.8)',
             });
           }
         }
@@ -218,8 +218,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
                 open: fvg.high, close: fvg.low,
                 high: fvg.high, low: fvg.low,
                 color: isBull 
-                  ? (isActive ? 'rgba(14, 203, 129, 0.6)' : 'rgba(14, 203, 129, 0.3)')
-                  : (isActive ? 'rgba(246, 70, 93, 0.6)' : 'rgba(246, 70, 93, 0.3)'),
+                  ? (isActive ? 'rgba(102, 255, 0, 0.7)' : 'rgba(102, 255, 0, 0.35)')
+                  : (isActive ? 'rgba(238, 75, 43, 0.7)' : 'rgba(238, 75, 43, 0.35)'),
               });
             }
           });
@@ -236,7 +236,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
                 open: fvg.high, close: fvg.low,
                 high: fvg.high, low: fvg.low,
                 color: 'rgba(0, 0, 0, 0)',
-                borderColor: isBull ? 'rgba(14, 203, 129, 0.5)' : 'rgba(246, 70, 93, 0.5)',
+                borderColor: isBull ? 'rgba(102, 255, 0, 0.6)' : 'rgba(238, 75, 43, 0.6)',
               });
             }
           });
