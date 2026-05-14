@@ -121,6 +121,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
     });
 
     chartRef.current = chart;
+    priceLinesRef.current = []; // Reset local memory for this new chart instance
     let isMounted = true;
 
     const fetchData = async () => {
@@ -215,44 +216,45 @@ const TradingViewWidget = ({ symbol, interval }) => {
         if (recentMitBull[0]) drawFVGBox(recentMitBull[0], true, true, false);
         if (recentMitBear[0]) drawFVGBox(recentMitBear[0], false, true, false);
 
-        // --- Active Trade Price Lines ---
+        // --- Active Trade Price Lines (Safe Implementation) ---
         const activeTrade = logs?.find(l => 
           l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
         );
 
-        if (activeTrade) {
-          // Cleanup old price lines for THIS instance
-          priceLinesRef.current.forEach(l => candleSeries.removePriceLine(l));
-          priceLinesRef.current = [];
+        if (activeTrade && candleSeries) {
+          try {
+            // No need to cleanup old lines from candleSeries because the series is NEW
+            // Just clear the reference array
+            priceLinesRef.current = [];
 
-          const entryLine = candleSeries.createPriceLine({
-            price: Number(activeTrade.entry),
-            color: 'var(--accent-blue)',
-            lineWidth: 2,
-            lineStyle: 0,
-            axisLabelVisible: true,
-            title: 'ENTRY',
-          });
-          const tpLine = candleSeries.createPriceLine({
-            price: Number(activeTrade.tp),
-            color: 'var(--buy-green)',
-            lineWidth: 2,
-            lineStyle: 1,
-            axisLabelVisible: true,
-            title: 'TP',
-          });
-          const slLine = candleSeries.createPriceLine({
-            price: Number(activeTrade.sl),
-            color: 'var(--sell-red)',
-            lineWidth: 2,
-            lineStyle: 1,
-            axisLabelVisible: true,
-            title: 'SL',
-          });
-          priceLinesRef.current = [entryLine, tpLine, slLine];
-        } else {
-          priceLinesRef.current.forEach(l => candleSeries.removePriceLine(l));
-          priceLinesRef.current = [];
+            const entryLine = candleSeries.createPriceLine({
+              price: Number(activeTrade.entry),
+              color: 'var(--accent-blue)',
+              lineWidth: 2,
+              lineStyle: 0,
+              axisLabelVisible: true,
+              title: 'ENTRY',
+            });
+            const tpLine = candleSeries.createPriceLine({
+              price: Number(activeTrade.tp),
+              color: 'var(--buy-green)',
+              lineWidth: 2,
+              lineStyle: 1,
+              axisLabelVisible: true,
+              title: 'TP',
+            });
+            const slLine = candleSeries.createPriceLine({
+              price: Number(activeTrade.sl),
+              color: 'var(--sell-red)',
+              lineWidth: 2,
+              lineStyle: 1,
+              axisLabelVisible: true,
+              title: 'SL',
+            });
+            priceLinesRef.current = [entryLine, tpLine, slLine];
+          } catch (e) {
+            console.error('[Chart] Failed to draw trade lines:', e.message);
+          }
         }
 
         // Analysis for Trendline / CRT / Justin
