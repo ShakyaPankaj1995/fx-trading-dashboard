@@ -1,0 +1,16 @@
+name: Automated FX Scanner
+
+on:
+  schedule:
+    # Run every 5 minutes (GitHub's free tier minimum reliable frequency)
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  ping-scanner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel Cron
+        run: |
+          curl -X GET "https://fx-trading-dashboard-three.vercel.app/api/cron" \
+          -I
