@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 
-const LOG_KEY = 'fx_signal_log_v2';
+const LOG_KEY = 'fx_signal_log_v3';
 
 function getRedis() {
   const url   = process.env.UPSTASH_REDIS_REST_URL;

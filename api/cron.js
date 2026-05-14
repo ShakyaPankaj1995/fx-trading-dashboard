@@ -3,7 +3,6 @@ import { analyzeData, analyzeCRTData } from './lib/strategy.js';
 import { analyzeJustinSetup } from './lib/justinStrategy.js';
 import https from 'https';
 
-const LOG_KEY = 'fx_signal_log_v2';
 
 function getRedis() {
   const url   = process.env.UPSTASH_REDIS_REST_URL;
@@ -28,7 +27,7 @@ const TIMEFRAMES = [
   { val: '5',   yf: '5m',  range: '5d'  }
 ];
 
-const LOG_KEY = 'fx_signal_log_v2';
+const LOG_KEY = 'fx_signal_log_v3';
 
 async function fetchYF(ticker, interval, range) {
   return new Promise((resolve, reject) => {
