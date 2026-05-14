@@ -344,13 +344,13 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
               <div style={{ color: 'var(--text-secondary)', opacity: 0.5, fontSize: '0.65rem' }}>No recent mitigations</div>
             ) : (
               <>
-                {recentMitBull.slice(0, 3).map((f, i) => (
+                {recentMitBull.slice(0, 1).map((f, i) => (
                   <div key={`rmb-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--buy-green)' }}>△ Bullish</span>
                     <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
                   </div>
                 ))}
-                {recentMitBear.slice(0, 3).map((f, i) => (
+                {recentMitBear.slice(0, 1).map((f, i) => (
                   <div key={`rmr-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--sell-red)' }}>▽ Bearish</span>
                     <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
