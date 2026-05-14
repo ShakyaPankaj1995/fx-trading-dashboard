@@ -115,12 +115,16 @@ const ChartSignal = ({ symbol, interval, strategyType = 'trendline', isCompact =
     entry: activeLoggedTrade.entry,
     sl: activeLoggedTrade.sl,
     tp: activeLoggedTrade.tp,
-    reason: activeLoggedTrade.reason || signalData?.reason || 'Active Trade Logged',
+    reason: activeLoggedTrade.reason || signalData?.reason || `${activeLoggedTrade.strategy} Trade Active`,
     reasoning: activeLoggedTrade.reasoning && activeLoggedTrade.reasoning.length > 0 
       ? activeLoggedTrade.reasoning 
-      : signalData?.reasoning?.length > 0 
+      : signalData?.reasoning && signalData.reasoning.length > 0
         ? signalData.reasoning 
-        : ['Trade is currently active and awaiting success or failure.'],
+        : [
+            `Institutional ${activeLoggedTrade.strategy} setup identified.`,
+            'Price is currently within the active trade zone.',
+            'Monitoring real-time price action for TP/SL targets.'
+          ],
     setupTime: activeLoggedTrade.setupTime ? new Date(activeLoggedTrade.setupTime).getTime() / 1000 : null
   } : signalData;
 
