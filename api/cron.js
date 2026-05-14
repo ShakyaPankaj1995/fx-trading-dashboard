@@ -28,8 +28,6 @@ const TIMEFRAMES = [
   { val: '5',   yf: '5m',  range: '5d'  }
 ];
 
-const LOG_KEY = 'fx_signal_log_v2';
-
 async function fetchYF(ticker, interval, range) {
   return new Promise((resolve, reject) => {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${interval}&range=${range}`;
@@ -44,6 +42,9 @@ async function fetchYF(ticker, interval, range) {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
+          if (!json.chart?.result?.[0]) {
+            return reject(new Error('No data in YF response'));
+          }
           resolve(json.chart.result[0]);
         } catch (e) {
           reject(e);
@@ -53,10 +54,33 @@ async function fetchYF(ticker, interval, range) {
   });
 }
 
+// Helper to aggregate 1h candles into 4h
+function aggregateRawTo4H(data) {
+  if (!data || !data.timestamp) return data;
+  const ts = data.timestamp;
+  const q = data.indicators.quote[0];
+  const groups = {};
+  for (let i = 0; i < ts.length; i++) {
+    if (q.open[i] == null || q.high[i] == null || q.low[i] == null || q.close[i] == null) continue;
+    const blockKey = Math.floor(ts[i] / (4 * 3600)) * (4 * 3600);
+    if (!groups[blockKey]) {
+      groups[blockKey] = { time: blockKey, open: q.open[i], high: q.high[i], low: q.low[i], close: q.close[i] };
+    } else {
+      const g = groups[blockKey];
+      g.high = Math.max(g.high, q.high[i]);
+      g.low = Math.min(g.low, q.low[i]);
+      g.close = q.close[i];
+    }
+  }
+  const sorted = Object.values(groups).sort((a, b) => a.time - b.time);
+  return {
+    timestamp: sorted.map(c => c.time),
+    indicators: { quote: [{ open: sorted.map(c => c.open), high: sorted.map(c => c.high), low: sorted.map(c => c.low), close: sorted.map(c => c.close) }] },
+    meta: data.meta
+  };
+}
+
 export default async function handler(req, res) {
-  // Add simple auth to prevent manual triggering by others if needed
-  // For Vercel Cron, you can check the CRON_SECRET header
-  
   try {
     const redis = getRedis();
     let logs = (redis ? await redis.get(LOG_KEY) : null) || [];
@@ -68,45 +92,109 @@ export default async function handler(req, res) {
 
     // 2. Identify new signals
     for (const asset of ASSETS) {
+      const htfResults = {};
+      const tfDataMap = {};
+
+      // First fetch all timeframes to check alignment
       for (const tf of TIMEFRAMES) {
         try {
-          const chartData = await fetchYF(asset.ticker, tf.yf, tf.range);
+          let chartData = await fetchYF(asset.ticker, tf.yf, tf.range);
+          if (tf.val === '240') chartData = aggregateRawTo4H(chartData);
+          tfDataMap[tf.val] = chartData;
           
-          // Run Trendline Strategy
-          const trendAnalysis = analyzeData(chartData, tf.val);
-          if (trendAnalysis.signal === 'BUY' || trendAnalysis.signal === 'SELL') {
-            logs = addLogIfNew(logs, asset.name, tf.val, 'Trendline', trendAnalysis);
-          }
-
-          // Run CRT Strategy
-          const crtAnalysis = analyzeCRTData(chartData, tf.val);
-          if (crtAnalysis.signal === 'BUY' || crtAnalysis.signal === 'SELL') {
-            logs = addLogIfNew(logs, asset.name, tf.val, 'CRT (AMD)', crtAnalysis);
-          }
-
-          // Run Justin Setup (with SMT correlated asset)
-          const smtPairs = {
-            'NASDAQ': 'ES=F', 'S&P500': 'NQ=F',
-            'EURUSD': 'GBPUSD=X', 'GBPUSD': 'EURUSD=X',
-            'XAUUSD': 'SI=F',
-          };
-          let correlatedData = null;
-          const correlatedTicker = smtPairs[asset.name];
-          if (correlatedTicker) {
-            try { correlatedData = await fetchYF(correlatedTicker, tf.yf, tf.range); } catch (_) {}
-          }
-          const justinAnalysis = analyzeJustinSetup(chartData, correlatedData, tf.val);
-          if (justinAnalysis.signal === 'BUY' || justinAnalysis.signal === 'SELL') {
-            logs = addLogIfNew(logs, asset.name, tf.val, 'Justin Setup', justinAnalysis);
+          // For Justin HTF FVGs (4H, 1H, 15M)
+          if (tf.val !== '5') {
+            const analysis = analyzeJustinSetup(chartData, null, tf.val);
+            htfResults[tf.val] = {
+              bullish: analysis.nearestBullFVG,
+              bearish: analysis.nearestBearFVG
+            };
           }
         } catch (e) {
-          console.error(`Error processing ${asset.name} ${tf.val}:`, e.message);
+          console.error(`Error fetching ${asset.name} ${tf.val}:`, e.message);
+        }
+      }
+
+      // Check for HTF Alignment (All 3 HTFs must have unmitigated FVG)
+      const htfTFs = ['240', '60', '15'];
+      const hasAllHTFFvgs = htfTFs.every(tf => htfResults[tf] && (htfResults[tf].bullish || htfResults[tf].bearish));
+      
+      // Determine direction alignment (All must be Bull or all must be Bear)
+      const allBullish = htfTFs.every(tf => htfResults[tf]?.bullish);
+      const allBearish = htfTFs.every(tf => htfResults[tf]?.bearish);
+      const isAligned = hasAllHTFFvgs && (allBullish || allBearish);
+
+      if (isAligned) {
+        // Now run strategies for all timeframes
+        for (const tfVal of Object.keys(tfDataMap)) {
+          const chartData = tfDataMap[tfVal];
+          
+          // Trendline Strategy
+          const trendAnalysis = analyzeData(chartData, tfVal);
+          if (trendAnalysis.signal === 'BUY' || trendAnalysis.signal === 'SELL') {
+            logs = addLogIfNew(logs, asset.name, tfVal, 'Trendline', trendAnalysis);
+          }
+
+          // CRT Strategy
+          const crtAnalysis = analyzeCRTData(chartData, tfVal);
+          if (crtAnalysis.signal === 'BUY' || crtAnalysis.signal === 'SELL') {
+            logs = addLogIfNew(logs, asset.name, tfVal, 'CRT (AMD)', crtAnalysis);
+          }
+
+          // Justin 5M Signal
+          if (tfVal === '5') {
+            const smtPairs = {
+              'NASDAQ': 'ES=F', 'S&P500': 'NQ=F',
+              'EURUSD': 'GBPUSD=X', 'GBPUSD': 'EURUSD=X',
+              'XAUUSD': 'SI=F',
+            };
+            let correlatedData = null;
+            const correlatedTicker = smtPairs[asset.name];
+            if (correlatedTicker) {
+              try { 
+                correlatedData = await fetchYF(correlatedTicker, '5m', '5d'); 
+              } catch (_) {}
+            }
+            
+            const justinAnalysis = analyzeJustinSetup(chartData, correlatedData, '5');
+            const cp = justinAnalysis.currentPrice;
+            
+            // Re-verify the alignment with current price for the 5M signal specifically
+            let inFVGsCount = 0;
+            htfTFs.forEach(tf => {
+              const fvgs = htfResults[tf];
+              if (allBullish && fvgs.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) inFVGsCount++;
+              if (allBearish && fvgs.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) inFVGsCount++;
+            });
+
+            let finalJustinSignal = 'NEUTRAL';
+            let entry, sl, tp;
+
+            if (allBullish && inFVGsCount > 0 && justinAnalysis.sweep?.type === 'BUY_SWEEP' && justinAnalysis.bullishCISD) {
+              finalJustinSignal = 'BUY';
+              entry = justinAnalysis.cisdBullFVG ? justinAnalysis.cisdBullFVG.low : cp;
+              sl = justinAnalysis.sweep.sweepLow - justinAnalysis.atr * 0.1;
+              tp = entry + (entry - sl) * 2.5;
+            } else if (allBearish && inFVGsCount > 0 && justinAnalysis.sweep?.type === 'SELL_SWEEP' && justinAnalysis.bearishCISD) {
+              finalJustinSignal = 'SELL';
+              entry = justinAnalysis.cisdBearFVG ? justinAnalysis.cisdBearFVG.high : cp;
+              sl = justinAnalysis.sweep.sweepHigh + justinAnalysis.atr * 0.1;
+              tp = entry - (sl - entry) * 2.5;
+            }
+
+            if (finalJustinSignal !== 'NEUTRAL') {
+              logs = addLogIfNew(logs, asset.name, '5', 'Justin Setup', {
+                signal: finalJustinSignal, entry, sl, tp,
+                reason: `${finalJustinSignal} Signal Identified (Aligned HTF)`,
+                reasoning: [`HTF Alignment Confirmed`, `Internal Sweep Confirmed`, `CISD Confirmed`]
+              });
+            }
+          }
         }
       }
     }
 
     // 3. Update outcomes for ACTIVE signals
-    // Group active logs by symbol to minimize fetches
     const activeLogs = logs.filter(l => l.status === 'ACTIVE');
     if (activeLogs.length > 0) {
       const symbols = [...new Set(activeLogs.map(l => l.symbol))];
@@ -120,23 +208,19 @@ export default async function handler(req, res) {
 
           logs = logs.map(log => {
             if (log.symbol !== sym || log.status !== 'ACTIVE') return log;
-            
             const logTime = new Date(log.timestamp).getTime() / 1000;
-            
-            // Find all candles after signal was logged
             for (let i = 0; i < timestamps.length; i++) {
               if (timestamps[i] < logTime) continue;
-              
               const high = quotes.high[i];
               const low = quotes.low[i];
               if (high == null || low == null) continue;
 
               if (log.signal === 'BUY') {
-                if (high >= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date(timestamps[i] * 1000).toISOString() };
-                if (low <= log.sl) return { ...log, status: 'FAILED', closedAt: new Date(timestamps[i] * 1000).toISOString() };
+                if (high >= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date(timestamps[i] * 1000).toISOString(), closePrice: log.tp };
+                if (low <= log.sl) return { ...log, status: 'FAILED', closedAt: new Date(timestamps[i] * 1000).toISOString(), closePrice: log.sl };
               } else {
-                if (low <= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date(timestamps[i] * 1000).toISOString() };
-                if (high >= log.sl) return { ...log, status: 'FAILED', closedAt: new Date(timestamps[i] * 1000).toISOString() };
+                if (low <= log.tp) return { ...log, status: 'SUCCESS', closedAt: new Date(timestamps[i] * 1000).toISOString(), closePrice: log.tp };
+                if (high >= log.sl) return { ...log, status: 'FAILED', closedAt: new Date(timestamps[i] * 1000).toISOString(), closePrice: log.sl };
               }
             }
             return log;
@@ -148,7 +232,7 @@ export default async function handler(req, res) {
     }
 
     if (redis) await redis.set(LOG_KEY, logs.slice(0, 500));
-    return res.status(200).json({ status: 'Scan complete', signalsFound: activeLogs.length });
+    return res.status(200).json({ status: 'Scan complete', activeTrades: logs.filter(l => l.status === 'ACTIVE').length });
   } catch (error) {
     console.error('Cron job error:', error);
     return res.status(500).json({ error: error.message });
@@ -156,16 +240,14 @@ export default async function handler(req, res) {
 }
 
 function addLogIfNew(logs, symbol, timeframe, strategy, analysis) {
-  const tenMinsAgo = Date.now() - 10 * 60 * 1000;
-  
-  // Deduplicate: Don't add if the same signal exists for this asset/tf/strategy recently
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
   const isDuplicate = logs.some(log => 
     log.symbol === symbol &&
     log.timeframe === timeframe &&
     log.strategy === strategy &&
     log.signal === analysis.signal &&
     log.status === 'ACTIVE' &&
-    new Date(log.timestamp).getTime() > tenMinsAgo
+    new Date(log.timestamp).getTime() > oneHourAgo
   );
 
   if (isDuplicate) return logs;
@@ -185,6 +267,8 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis) {
     sl: analysis.sl,
     tp: analysis.tp,
     rr,
+    reason: analysis.reason || null,
+    reasoning: analysis.reasoning || null,
     status: 'ACTIVE',
     closedAt: null,
   };
