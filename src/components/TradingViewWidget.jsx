@@ -222,11 +222,11 @@ const TradingViewWidget = ({ symbol, interval }) => {
         if (activeTrade) {
           // Cleanup old price lines if any
           if (window.activeTradeLines) {
-            window.activeTradeLines.forEach(l => candlestickSeries.removePriceLine(l));
+            window.activeTradeLines.forEach(l => candleSeries.removePriceLine(l));
           }
           window.activeTradeLines = [];
 
-          const entryLine = candlestickSeries.createPriceLine({
+          const entryLine = candleSeries.createPriceLine({
             price: activeTrade.entry,
             color: 'var(--accent-blue)',
             lineWidth: 2,
@@ -234,7 +234,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
             axisLabelVisible: true,
             title: 'ENTRY',
           });
-          const tpLine = candlestickSeries.createPriceLine({
+          const tpLine = candleSeries.createPriceLine({
             price: activeTrade.tp,
             color: 'var(--buy-green)',
             lineWidth: 2,
@@ -242,7 +242,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
             axisLabelVisible: true,
             title: 'TP',
           });
-          const slLine = candlestickSeries.createPriceLine({
+          const slLine = candleSeries.createPriceLine({
             price: activeTrade.sl,
             color: 'var(--sell-red)',
             lineWidth: 2,
@@ -252,7 +252,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
           });
           window.activeTradeLines = [entryLine, tpLine, slLine];
         } else if (window.activeTradeLines) {
-          window.activeTradeLines.forEach(l => candlestickSeries.removePriceLine(l));
+          window.activeTradeLines.forEach(l => candleSeries.removePriceLine(l));
           window.activeTradeLines = null;
         }
 
