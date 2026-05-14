@@ -170,93 +170,58 @@ const TradingViewWidget = ({ symbol, interval }) => {
         // 3. Justin Setup Analysis (uses the correct-timeframe data)
         const justinSignal = analyzeJustinSetup(analysisData, null, interval);
         
-        // Draw FVGs with two tiers: Unmitigated (filled) + Mitigated (outlined)
+        // --- Multi-Series FVG Rendering (Supports Overlapping Boxes) ---
         const allBull = justinSignal.allBullishFVGs || [];
         const allBear = justinSignal.allBearishFVGs || [];
         const recentMitBull = justinSignal.recentMitigatedBull || [];
         const recentMitBear = justinSignal.recentMitigatedBear || [];
         const nearestBull = justinSignal.nearestBullFVG;
         const nearestBear = justinSignal.nearestBearFVG;
-        const hasFVGs = allBull.length > 0 || allBear.length > 0 || recentMitBull.length > 0 || recentMitBear.length > 0;
 
-        if (hasFVGs) {
-          // unmitigatedSeries for all unmitigated FVGs (filled)
-          if (!fvgDimSeriesRef.current) {
-            fvgDimSeriesRef.current = chart.addCandlestickSeries({
-              upColor: 'rgba(14, 203, 129, 0.4)',
-              downColor: 'rgba(246, 70, 93, 0.4)',
-              borderVisible: false, wickVisible: false,
-              lastValueVisible: false, priceLineVisible: false,
-            });
-          }
-          // mitigatedSeries for mitigated FVGs (outlined)
-          if (!fvgHighlightSeriesRef.current) {
-            fvgHighlightSeriesRef.current = chart.addCandlestickSeries({
-              upColor: 'rgba(0, 0, 0, 0)',
-              downColor: 'rgba(0, 0, 0, 0)',
-              borderVisible: true, wickVisible: false,
-              lastValueVisible: false, priceLineVisible: false,
-              borderUpColor: 'rgba(102, 255, 0, 0.8)',
-              borderDownColor: 'rgba(238, 75, 43, 0.8)',
-            });
-          }
-        }
+        // Cleanup existing FVG series pool
+        if (!window.fvgSeriesPool) window.fvgSeriesPool = [];
+        window.fvgSeriesPool.forEach(s => { try { chart.removeSeries(s); } catch(e) {} });
+        window.fvgSeriesPool = [];
 
-        const unmitData = [];
-        const mitData = [];
-
-        // 1. Process Unmitigated FVGs (Solid Fill)
-        [...allBull, ...allBear].forEach(fvg => {
-          const isBull = allBull.includes(fvg);
-          const isActive = (nearestBull && fvg.time === nearestBull.time) || (nearestBear && fvg.time === nearestBear.time);
-          const startTime = fvg.time;
-
-          formattedData.forEach(d => {
-            if (d.time >= startTime) {
-              unmitData.push({
-                time: d.time,
-                open: fvg.high, close: fvg.low,
-                high: fvg.high, low: fvg.low,
-                color: isBull 
-                  ? (isActive ? 'rgba(102, 255, 0, 0.7)' : 'rgba(102, 255, 0, 0.35)')
-                  : (isActive ? 'rgba(238, 75, 43, 0.7)' : 'rgba(238, 75, 43, 0.35)'),
-              });
-            }
+        const drawFVGBox = (fvg, isBull, isMitigated, isActive) => {
+          const series = chart.addCandlestickSeries({
+            upColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
+            downColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
+            borderVisible: isMitigated || isActive,
+            wickVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            borderUpColor: isBull ? 'rgba(102, 255, 0, 0.8)' : 'rgba(238, 75, 43, 0.8)',
+            borderDownColor: isBull ? 'rgba(102, 255, 0, 0.8)' : 'rgba(238, 75, 43, 0.8)',
           });
-        });
-
-        // 2. Process Mitigated FVGs (Outlines Only)
-        [...recentMitBull, ...recentMitBear].forEach(fvg => {
-          const isBull = recentMitBull.includes(fvg);
-          const startTime = fvg.time;
-          formattedData.forEach(d => {
-            if (d.time >= startTime) {
-              mitData.push({
-                time: d.time,
-                open: fvg.high, close: fvg.low,
-                high: fvg.high, low: fvg.low,
-                color: 'rgba(0, 0, 0, 0)',
-                borderColor: isBull ? 'rgba(102, 255, 0, 0.6)' : 'rgba(238, 75, 43, 0.6)',
-              });
-            }
-          });
-        });
-
-        // Deduplicate: If multiple boxes cover the same candle, show the most relevant one
-        const dedup = (arr) => {
-          const map = new Map();
-          arr.forEach(d => {
-            const existing = map.get(d.time);
-            // Priority: keep the one with higher opacity/importance if needed
-            if (!existing || d.color !== 'rgba(0, 0, 0, 0)') {
-              map.set(d.time, d);
-            }
-          });
-          return [...map.values()].sort((a, b) => a.time - b.time);
+          
+          const boxData = formattedData
+            .filter(d => d.time >= fvg.time)
+            .map(d => ({
+              time: d.time,
+              open: fvg.high, close: fvg.low,
+              high: fvg.high, low: fvg.low,
+            }));
+            
+          series.setData(boxData);
+          window.fvgSeriesPool.push(series);
         };
 
-        if (fvgDimSeriesRef.current) fvgDimSeriesRef.current.setData(dedup(unmitData));
-        if (fvgHighlightSeriesRef.current) fvgHighlightSeriesRef.current.setData(dedup(mitData));
+        // 1. Draw Unmitigated Bullish
+        allBull.forEach(fvg => {
+          const isActive = nearestBull && fvg.time === nearestBull.time;
+          drawFVGBox(fvg, true, false, isActive);
+        });
+
+        // 2. Draw Unmitigated Bearish
+        allBear.forEach(fvg => {
+          const isActive = nearestBear && fvg.time === nearestBear.time;
+          drawFVGBox(fvg, false, false, isActive);
+        });
+
+        // 3. Draw Recently Mitigated (Plural)
+        recentMitBull.forEach(fvg => drawFVGBox(fvg, true, true, false));
+        recentMitBear.forEach(fvg => drawFVGBox(fvg, false, true, false));
 
         // Analysis for Trendline / CRT / Justin
         const trendSignal = analyzeData(analysisData, interval);
