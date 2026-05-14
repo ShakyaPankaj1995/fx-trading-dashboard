@@ -66,14 +66,14 @@ export function useSignalLog() {
       if (res.ok) {
         const events = await res.json();
         const nowTime = Date.now();
-        const buffer = 30 * 60 * 1000;
+        const buffer = 60 * 60 * 1000; // 1 Hour Buffer
         const hasNews = events.some(e => {
           const et = new Date(e.date).getTime();
           return nowTime >= (et - buffer) && nowTime <= (et + buffer);
         });
         if (hasNews) {
           console.warn(`[SignalLog] Blocked ${signal.symbol} signal due to high/medium impact news event.`);
-          alert(`⚠️ News Warning: Signal for ${signal.symbol} blocked due to upcoming/recent High/Medium impact news.`);
+          alert(`⚠️ News Warning: Signal for ${signal.symbol} blocked due to upcoming/recent High/Medium impact news (1-Hour Filter active).`);
           return;
         }
       }

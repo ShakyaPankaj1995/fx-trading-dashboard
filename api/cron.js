@@ -88,7 +88,7 @@ export default async function handler(req, res) {
         if (event.impact !== 'High' && event.impact !== 'Medium') return false;
         
         const eventTime = new Date(event.date).getTime();
-        const buffer = 30 * 60 * 1000; // 30 mins
+        const buffer = 60 * 60 * 1000; // 1 Hour Buffer
         return currentTime >= (eventTime - buffer) && currentTime <= (eventTime + buffer);
       });
     };
@@ -100,7 +100,7 @@ export default async function handler(req, res) {
           const chartData = await fetchYF(asset.ticker, tf.yf, tf.range);
           const currentTime = Date.now();
 
-          // NEWS FILTER: Skip if within 30 mins of high/medium impact news
+          // NEWS FILTER: Skip if within 60 mins of high/medium impact news
           if (isNewsRestricted(asset.name, currentTime)) {
             console.log(`[Cron] Skipping ${asset.name} due to News Restriction`);
             continue;
