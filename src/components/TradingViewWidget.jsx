@@ -138,9 +138,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
         }
 
         let yfSymbol = `${symbol}=X`;
-        if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') yfSymbol = 'ES=F';
-        else if (symbol === 'NDX' || symbol === 'NASDAQ') yfSymbol = 'NQ=F';
-        else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'GC=F';
+        if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') yfSymbol = '^GSPC';
+        else if (symbol === 'NDX' || symbol === 'NASDAQ') yfSymbol = '^IXIC';
+        else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'XAUUSD=X';
 
         const res = await fetch(`/api/finance/v8/finance/chart/${yfSymbol}?interval=${yfInterval}&range=${range}`);
         if (!isMounted) return;
