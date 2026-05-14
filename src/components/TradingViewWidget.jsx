@@ -52,7 +52,6 @@ const TradingViewWidget = ({ symbol, interval }) => {
   const chartRef = useRef();
   const fvgDimSeriesRef = useRef();
   const fvgHighlightSeriesRef = useRef();
-  const priceLinesRef = useRef([]);
   const { logs } = useSignalLogContext();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -118,7 +117,6 @@ const TradingViewWidget = ({ symbol, interval }) => {
     });
 
     chartRef.current = chart;
-    priceLinesRef.current = []; // Reset local memory for this new chart instance
     let isMounted = true;
 
     const fetchData = async () => {
@@ -219,69 +217,8 @@ const TradingViewWidget = ({ symbol, interval }) => {
         if (recentMitBull[0]) drawFVGBox(recentMitBull[0], true, true, false);
         if (recentMitBear[0]) drawFVGBox(recentMitBear[0], false, true, false);
 
-        // --- Active Trade Price Lines (Ultra-Safe Version) ---
-        const activeTrade = logs?.find(l => 
-          l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
-        );
-
-        if (activeTrade && candleSeries && formattedData.length > 0) {
-          try {
-            const entry = Number(activeTrade.entry);
-            const tp = Number(activeTrade.tp);
-            const sl = Number(activeTrade.sl);
-            
-            // Get current market price for range check
-            const currentPrice = formattedData[formattedData.length - 1].close;
-            const priceThreshold = currentPrice * 0.2; // 20% deviation max
-
-            const isPriceRealistic = (p) => {
-              return !isNaN(p) && p > 0 && Math.abs(p - currentPrice) < priceThreshold;
-            };
-
-            if (isPriceRealistic(entry)) {
-              priceLinesRef.current = [];
-              const entryLine = candleSeries.createPriceLine({
-                price: entry,
-                color: 'var(--accent-blue)',
-                lineWidth: 2,
-                lineStyle: 0,
-                axisLabelVisible: true,
-                title: 'ENTRY',
-              });
-              priceLinesRef.current.push(entryLine);
-
-              if (isPriceRealistic(tp)) {
-                const tpLine = candleSeries.createPriceLine({
-                  price: tp,
-                  color: 'var(--buy-green)',
-                  lineWidth: 2,
-                  lineStyle: 1,
-                  axisLabelVisible: true,
-                  title: 'TP',
-                });
-                priceLinesRef.current.push(tpLine);
-              }
-
-              if (isPriceRealistic(sl)) {
-                const slLine = candleSeries.createPriceLine({
-                  price: sl,
-                  color: 'var(--sell-red)',
-                  lineWidth: 2,
-                  lineStyle: 1,
-                  axisLabelVisible: true,
-                  title: 'SL',
-                });
-                priceLinesRef.current.push(slLine);
-              }
-            } else {
-              console.warn(`[Chart] Skipping trade lines for ${symbol}: Price ${entry} is too far from market ${currentPrice}`);
-            }
-          } catch (e) {
-            console.error('[Chart] Safe Price Line Error:', e.message);
-          }
-        }
-
         // Analysis for Trendline / CRT / Justin
+        // ... (existing analysis logic) ...
         const trendSignal = analyzeData(analysisData, interval);
         const crtSignal = analyzeCRTData(analysisData, interval);
         
@@ -343,12 +280,13 @@ const TradingViewWidget = ({ symbol, interval }) => {
 
     return () => {
       isMounted = false;
+      clearInterval(intervalId);
       resizeObserver.disconnect();
       try { chart.remove(); } catch(e) {}
       fvgDimSeriesRef.current = null;
       fvgHighlightSeriesRef.current = null;
     };
-  }, [symbol, interval, logs]);
+  }, [symbol, interval]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
