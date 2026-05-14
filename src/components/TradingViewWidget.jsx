@@ -222,20 +222,27 @@ const TradingViewWidget = ({ symbol, interval }) => {
         if (recentMitBull[0]) drawFVGBox(recentMitBull[0], true, true, false);
         if (recentMitBear[0]) drawFVGBox(recentMitBear[0], false, true, false);
 
-        // --- Active Trade Price Lines (Safe Implementation) ---
+        // --- Active Trade Price Lines (Ultra-Safe Version) ---
         const activeTrade = logs?.find(l => 
           l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
         );
 
-        if (activeTrade && candleSeries) {
+        if (activeTrade && candleSeries && formattedData.length > 0) {
           try {
             const entry = Number(activeTrade.entry);
             const tp = Number(activeTrade.tp);
             const sl = Number(activeTrade.sl);
+            
+            // Get current market price for range check
+            const currentPrice = formattedData[formattedData.length - 1].close;
+            const priceThreshold = currentPrice * 0.2; // 20% deviation max
 
-            if (!isNaN(entry) && entry > 0) {
+            const isPriceRealistic = (p) => {
+              return !isNaN(p) && p > 0 && Math.abs(p - currentPrice) < priceThreshold;
+            };
+
+            if (isPriceRealistic(entry)) {
               priceLinesRef.current = [];
-
               const entryLine = candleSeries.createPriceLine({
                 price: entry,
                 color: 'var(--accent-blue)',
@@ -246,7 +253,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
               });
               priceLinesRef.current.push(entryLine);
 
-              if (!isNaN(tp) && tp > 0) {
+              if (isPriceRealistic(tp)) {
                 const tpLine = candleSeries.createPriceLine({
                   price: tp,
                   color: 'var(--buy-green)',
@@ -258,7 +265,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
                 priceLinesRef.current.push(tpLine);
               }
 
-              if (!isNaN(sl) && sl > 0) {
+              if (isPriceRealistic(sl)) {
                 const slLine = candleSeries.createPriceLine({
                   price: sl,
                   color: 'var(--sell-red)',
@@ -269,9 +276,11 @@ const TradingViewWidget = ({ symbol, interval }) => {
                 });
                 priceLinesRef.current.push(slLine);
               }
+            } else {
+              console.warn(`[Chart] Skipping trade lines for ${symbol}: Price ${entry} is too far from market ${currentPrice}`);
             }
           } catch (e) {
-            console.error('[Chart] Failed to draw trade lines:', e.message);
+            console.error('[Chart] Safe Price Line Error:', e.message);
           }
         }
 
