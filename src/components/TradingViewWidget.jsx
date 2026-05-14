@@ -323,7 +323,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
       fvgDimSeriesRef.current = null;
       fvgHighlightSeriesRef.current = null;
     };
-  }, [symbol, interval]);
+  }, [symbol, interval, logs]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
