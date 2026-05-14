@@ -2,6 +2,7 @@ import React, { useEffect, useRef, memo, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import { analyzeData, analyzeCRTData } from '../utils/strategy';
 import { analyzeJustinSetup } from '../utils/justinStrategy';
+import { useSignalLogContext } from '../context/SignalLogContext';
 
 // Aggregate 60m candles into 4H candles
 function aggregateTo4H(candles) {
@@ -51,6 +52,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
   const chartRef = useRef();
   const fvgDimSeriesRef = useRef();
   const fvgHighlightSeriesRef = useRef();
+  const { logs } = useSignalLogContext();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -170,13 +172,11 @@ const TradingViewWidget = ({ symbol, interval }) => {
         // 3. Justin Setup Analysis (uses the correct-timeframe data)
         const justinSignal = analyzeJustinSetup(analysisData, null, interval);
         
-        // --- Multi-Series FVG Rendering (Supports Overlapping Boxes) ---
-        const allBull = justinSignal.allBullishFVGs || [];
-        const allBear = justinSignal.allBearishFVGs || [];
-        const recentMitBull = justinSignal.recentMitigatedBull || [];
-        const recentMitBear = justinSignal.recentMitigatedBear || [];
+        // --- Multi-Series FVG Rendering (Limited to Mentioned Gaps) ---
         const nearestBull = justinSignal.nearestBullFVG;
         const nearestBear = justinSignal.nearestBearFVG;
+        const recentMitBull = (justinSignal.recentMitigatedBull || []).slice(0, 1);
+        const recentMitBear = (justinSignal.recentMitigatedBear || []).slice(0, 1);
 
         // Cleanup existing FVG series pool
         if (!window.fvgSeriesPool) window.fvgSeriesPool = [];
@@ -184,6 +184,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
         window.fvgSeriesPool = [];
 
         const drawFVGBox = (fvg, isBull, isMitigated, isActive) => {
+          if (!fvg) return;
           const series = chart.addCandlestickSeries({
             upColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
             downColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
@@ -207,21 +208,53 @@ const TradingViewWidget = ({ symbol, interval }) => {
           window.fvgSeriesPool.push(series);
         };
 
-        // 1. Draw Unmitigated Bullish
-        allBull.forEach(fvg => {
-          const isActive = nearestBull && fvg.time === nearestBull.time;
-          drawFVGBox(fvg, true, false, isActive);
-        });
+        // Draw only the "Mentioned" FVGs
+        if (nearestBull) drawFVGBox(nearestBull, true, false, true);
+        if (nearestBear) drawFVGBox(nearestBear, false, false, true);
+        if (recentMitBull[0]) drawFVGBox(recentMitBull[0], true, true, false);
+        if (recentMitBear[0]) drawFVGBox(recentMitBear[0], false, true, false);
 
-        // 2. Draw Unmitigated Bearish
-        allBear.forEach(fvg => {
-          const isActive = nearestBear && fvg.time === nearestBear.time;
-          drawFVGBox(fvg, false, false, isActive);
-        });
+        // --- Active Trade Price Lines ---
+        const activeTrade = logs?.find(l => 
+          l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
+        );
 
-        // 3. Draw Recently Mitigated (Plural)
-        recentMitBull.forEach(fvg => drawFVGBox(fvg, true, true, false));
-        recentMitBear.forEach(fvg => drawFVGBox(fvg, false, true, false));
+        if (activeTrade) {
+          // Cleanup old price lines if any
+          if (window.activeTradeLines) {
+            window.activeTradeLines.forEach(l => candlestickSeries.removePriceLine(l));
+          }
+          window.activeTradeLines = [];
+
+          const entryLine = candlestickSeries.createPriceLine({
+            price: activeTrade.entry,
+            color: 'var(--accent-blue)',
+            lineWidth: 2,
+            lineStyle: 0, // Solid
+            axisLabelVisible: true,
+            title: 'ENTRY',
+          });
+          const tpLine = candlestickSeries.createPriceLine({
+            price: activeTrade.tp,
+            color: 'var(--buy-green)',
+            lineWidth: 2,
+            lineStyle: 1, // Dotted
+            axisLabelVisible: true,
+            title: 'TP',
+          });
+          const slLine = candlestickSeries.createPriceLine({
+            price: activeTrade.sl,
+            color: 'var(--sell-red)',
+            lineWidth: 2,
+            lineStyle: 1, // Dotted
+            axisLabelVisible: true,
+            title: 'SL',
+          });
+          window.activeTradeLines = [entryLine, tpLine, slLine];
+        } else if (window.activeTradeLines) {
+          window.activeTradeLines.forEach(l => candlestickSeries.removePriceLine(l));
+          window.activeTradeLines = null;
+        }
 
         // Analysis for Trendline / CRT / Justin
         const trendSignal = analyzeData(analysisData, interval);
