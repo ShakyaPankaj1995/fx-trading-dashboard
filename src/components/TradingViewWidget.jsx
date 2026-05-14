@@ -170,98 +170,93 @@ const TradingViewWidget = ({ symbol, interval }) => {
         // 3. Justin Setup Analysis (uses the correct-timeframe data)
         const justinSignal = analyzeJustinSetup(analysisData, null, interval);
         
-        // Draw FVGs with two tiers: highlighted (active) + dimmed (others)
+        // Draw FVGs with two tiers: Unmitigated (filled) + Mitigated (outlined)
         const allBull = justinSignal.allBullishFVGs || [];
         const allBear = justinSignal.allBearishFVGs || [];
-        const mitigatedBull = justinSignal.recentMitigatedBull;
-        const mitigatedBear = justinSignal.recentMitigatedBear;
+        const recentMitBull = justinSignal.recentMitigatedBull || [];
+        const recentMitBear = justinSignal.recentMitigatedBear || [];
         const nearestBull = justinSignal.nearestBullFVG;
         const nearestBear = justinSignal.nearestBearFVG;
-        const hasFVGs = allBull.length > 0 || allBear.length > 0 || mitigatedBull || mitigatedBear;
+        const hasFVGs = allBull.length > 0 || allBear.length > 0 || recentMitBull.length > 0 || recentMitBear.length > 0;
 
         if (hasFVGs) {
-          // Dimmed series for all other FVGs
+          // unmitigatedSeries for all unmitigated FVGs (filled)
           if (!fvgDimSeriesRef.current) {
             fvgDimSeriesRef.current = chart.addCandlestickSeries({
-              upColor: 'rgba(14, 203, 129, 0.2)',
-              downColor: 'rgba(246, 70, 93, 0.2)',
+              upColor: 'rgba(14, 203, 129, 0.4)',
+              downColor: 'rgba(246, 70, 93, 0.4)',
               borderVisible: false, wickVisible: false,
               lastValueVisible: false, priceLineVisible: false,
             });
           }
-          // Highlighted series for the active/card FVG
+          // mitigatedSeries for mitigated FVGs (outlined)
           if (!fvgHighlightSeriesRef.current) {
             fvgHighlightSeriesRef.current = chart.addCandlestickSeries({
-              upColor: 'rgba(14, 203, 129, 0.7)',
-              downColor: 'rgba(246, 70, 93, 0.7)',
+              upColor: 'rgba(0, 0, 0, 0)',
+              downColor: 'rgba(0, 0, 0, 0)',
               borderVisible: true, wickVisible: false,
               lastValueVisible: false, priceLineVisible: false,
-              borderUpColor: 'rgba(14, 203, 129, 0.9)',
-              borderDownColor: 'rgba(246, 70, 93, 0.9)',
+              borderUpColor: 'rgba(14, 203, 129, 0.6)',
+              borderDownColor: 'rgba(246, 70, 93, 0.6)',
             });
           }
         }
 
-        // Build FVG box data
-        const isActiveFVG = (fvg) => {
-          if (nearestBull && Math.abs(fvg.low - nearestBull.low) < 0.0001 && Math.abs(fvg.high - nearestBull.high) < 0.0001) return true;
-          if (nearestBear && Math.abs(fvg.low - nearestBear.low) < 0.0001 && Math.abs(fvg.high - nearestBear.high) < 0.0001) return true;
-          return false;
-        };
+        const unmitData = [];
+        const mitData = [];
 
-        const dimData = [];
-        const highlightData = [];
-
+        // 1. Process Unmitigated FVGs (Solid Fill)
         [...allBull, ...allBear].forEach(fvg => {
           const isBull = allBull.includes(fvg);
-          const isActive = isActiveFVG(fvg);
+          const isActive = (nearestBull && fvg.time === nearestBull.time) || (nearestBear && fvg.time === nearestBear.time);
           const startTime = fvg.time;
 
           formattedData.forEach(d => {
             if (d.time >= startTime) {
-              const entry = {
+              unmitData.push({
                 time: d.time,
                 open: fvg.high, close: fvg.low,
                 high: fvg.high, low: fvg.low,
-                color: isActive
-                  ? (isBull ? 'rgba(14, 203, 129, 0.7)' : 'rgba(246, 70, 93, 0.7)')
-                  : (isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)'),
-                borderColor: isActive
-                  ? (isBull ? 'rgba(14, 203, 129, 0.9)' : 'rgba(246, 70, 93, 0.9)')
-                  : (isBull ? 'rgba(14, 203, 129, 0.15)' : 'rgba(246, 70, 93, 0.15)'),
-              };
-              if (isActive) highlightData.push(entry);
-              else dimData.push(entry);
-            }
-          });
-        });
-
-        // Add Mitigated FVGs
-        [mitigatedBull, mitigatedBear].filter(Boolean).forEach(fvg => {
-          const isBull = fvg === mitigatedBull;
-          const startTime = fvg.time;
-          formattedData.forEach(d => {
-            if (d.time >= startTime) {
-              highlightData.push({
-                time: d.time,
-                open: fvg.high, close: fvg.low,
-                high: fvg.high, low: fvg.low,
-                color: 'rgba(0, 0, 0, 0)',
-                borderColor: isBull ? 'rgba(14, 203, 129, 0.9)' : 'rgba(246, 70, 93, 0.9)',
+                color: isBull 
+                  ? (isActive ? 'rgba(14, 203, 129, 0.6)' : 'rgba(14, 203, 129, 0.3)')
+                  : (isActive ? 'rgba(246, 70, 93, 0.6)' : 'rgba(246, 70, 93, 0.3)'),
               });
             }
           });
         });
 
-        // Deduplicate by time (keep latest per timestamp)
+        // 2. Process Mitigated FVGs (Outlines Only)
+        [...recentMitBull, ...recentMitBear].forEach(fvg => {
+          const isBull = recentMitBull.includes(fvg);
+          const startTime = fvg.time;
+          formattedData.forEach(d => {
+            if (d.time >= startTime) {
+              mitData.push({
+                time: d.time,
+                open: fvg.high, close: fvg.low,
+                high: fvg.high, low: fvg.low,
+                color: 'rgba(0, 0, 0, 0)',
+                borderColor: isBull ? 'rgba(14, 203, 129, 0.5)' : 'rgba(246, 70, 93, 0.5)',
+              });
+            }
+          });
+        });
+
+        // Deduplicate: If multiple boxes cover the same candle, show the most relevant one
         const dedup = (arr) => {
           const map = new Map();
-          arr.forEach(d => map.set(d.time, d));
+          arr.forEach(d => {
+            const existing = map.get(d.time);
+            // Priority: keep the one with higher opacity/importance if needed
+            if (!existing || d.color !== 'rgba(0, 0, 0, 0)') {
+              map.set(d.time, d);
+            }
+          });
           return [...map.values()].sort((a, b) => a.time - b.time);
         };
 
-        if (fvgDimSeriesRef.current) fvgDimSeriesRef.current.setData(dedup(dimData));
-        if (fvgHighlightSeriesRef.current) fvgHighlightSeriesRef.current.setData(dedup(highlightData));
+        if (fvgDimSeriesRef.current) fvgDimSeriesRef.current.setData(dedup(unmitData));
+        if (fvgHighlightSeriesRef.current) fvgHighlightSeriesRef.current.setData(dedup(mitData));
 
         // Analysis for Trendline / CRT / Justin
         const trendSignal = analyzeData(analysisData, interval);

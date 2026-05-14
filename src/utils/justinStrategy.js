@@ -222,8 +222,9 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
   const mitigatedBull = bullishFVGs.filter(f => f.mitigated);
   const mitigatedBear = bearishFVGs.filter(f => f.mitigated);
 
-  const recentMitigatedBull = mitigatedBull[mitigatedBull.length - 1] || null;
-  const recentMitigatedBear = mitigatedBear[mitigatedBear.length - 1] || null;
+  // Return last 3 mitigated FVGs for display
+  const recentMitigatedBull = mitigatedBull.slice(-3).reverse();
+  const recentMitigatedBear = mitigatedBear.slice(-3).reverse();
 
   const nearestBullFVG = [...unmitigatedBull].sort((a, b) => Math.abs(currentPrice - a.high) - Math.abs(currentPrice - b.high))[0] || null;
   const nearestBearFVG = [...unmitigatedBear].sort((a, b) => Math.abs(currentPrice - a.low) - Math.abs(currentPrice - b.low))[0] || null;

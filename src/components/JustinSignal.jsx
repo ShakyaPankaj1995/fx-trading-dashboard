@@ -309,25 +309,53 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   if (interval !== '5') {
     const bullFVG = signalData.nearestBullFVG;
     const bearFVG = signalData.nearestBearFVG;
+    const recentMitBull = signalData.recentMitigatedBull || [];
+    const recentMitBear = signalData.recentMitigatedBear || [];
+    
     const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX', 'BTCUSD', 'BTC'].includes(symbol);
     const prec = isForex ? 5 : 2;
+
     return (
-      <div className="chart-signal compact neutral" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-        <div className="signal-reason-small" style={{ color: 'var(--text-primary)' }}>Nearest Unmitigated FVGs</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', width: '100%' }}>
-          {bullFVG ? (
-             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-               <span style={{ color: 'var(--buy-green)' }}>▲ Bullish</span>
-               <span style={{ fontFamily: 'var(--font-mono)' }}>{bullFVG.low.toFixed(prec)} - {bullFVG.high.toFixed(prec)}</span>
-             </div>
-          ) : <div style={{ color: 'var(--text-secondary)' }}>No Bullish FVG</div>}
-          {bearFVG ? (
-             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-               <span style={{ color: 'var(--sell-red)' }}>▼ Bearish</span>
-               <span style={{ fontFamily: 'var(--font-mono)' }}>{bearFVG.low.toFixed(prec)} - {bearFVG.high.toFixed(prec)}</span>
-             </div>
-          ) : <div style={{ color: 'var(--text-secondary)' }}>No Bearish FVG</div>}
+      <div className="chart-signal compact neutral" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>
+        {/* Unmitigated Section */}
+        <div style={{ width: '100%' }}>
+          <div className="signal-reason-small" style={{ color: 'var(--text-primary)', marginBottom: '4px' }}>Unmitigated FVGs</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', width: '100%' }}>
+            {bullFVG ? (
+               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                 <span style={{ color: 'var(--buy-green)' }}>▲ Bullish</span>
+                 <span style={{ fontFamily: 'var(--font-mono)' }}>{bullFVG.low.toFixed(prec)} - {bullFVG.high.toFixed(prec)}</span>
+               </div>
+            ) : <div style={{ color: 'var(--text-secondary)' }}>No Bullish FVG</div>}
+            {bearFVG ? (
+               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                 <span style={{ color: 'var(--sell-red)' }}>▼ Bearish</span>
+                 <span style={{ fontFamily: 'var(--font-mono)' }}>{bearFVG.low.toFixed(prec)} - {bearFVG.high.toFixed(prec)}</span>
+               </div>
+            ) : <div style={{ color: 'var(--text-secondary)' }}>No Bearish FVG</div>}
+          </div>
         </div>
+
+        {/* Recently Mitigated Section */}
+        {(recentMitBull.length > 0 || recentMitBear.length > 0) && (
+          <div style={{ width: '100%', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px' }}>
+            <div className="signal-reason-small" style={{ color: 'var(--text-secondary)', marginBottom: '4px', fontSize: '0.65rem' }}>Recently Mitigated</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.7rem', width: '100%', opacity: 0.8 }}>
+              {recentMitBull.slice(0, 2).map((f, i) => (
+                <div key={`rmb-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--buy-green)', opacity: 0.7 }}>△ Bullish</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
+                </div>
+              ))}
+              {recentMitBear.slice(0, 2).map((f, i) => (
+                <div key={`rmr-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--sell-red)', opacity: 0.7 }}>▽ Bearish</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{f.low.toFixed(prec)}-{f.high.toFixed(prec)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
