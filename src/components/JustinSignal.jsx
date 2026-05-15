@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { analyzeJustinSetup } from '../utils/justinStrategy';
+import { analyzeJustinSetup, evaluateScenario } from '../utils/justinStrategy';
 import { Target, ShieldAlert, ArrowRight, RefreshCw, Zap, TrendingUp, TrendingDown } from 'lucide-react';
 import { useSignalLogContext } from '../context/SignalLogContext';
 
@@ -44,6 +44,7 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [smtStatus, setSmtStatus] = useState(null);
+  const [htfContext, setHtfContext] = useState(null); // 4H/1H/15M FVGs for scenario matrix
   const { logs, addSignal } = useSignalLogContext();
   const lastLoggedRef = useRef(null);
   const isMountedRef = useRef(true);
@@ -94,21 +95,32 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
       setSignalData(analysis);
 
       if (interval !== '5' && onUpdateFVG) {
-        const activeFVG = analysis.activeBullFVG || analysis.activeBearFVG;
-        onUpdateFVG(interval, activeFVG ? { ...activeFVG, type: analysis.activeBullFVG ? 'BULL' : 'BEAR' } : null);
+        onUpdateFVG(interval, { bullish: analysis.nearestBullFVG, bearish: analysis.nearestBearFVG });
       }
 
-      if (analysis.signal === 'BUY' || analysis.signal === 'SELL') {
-        const key = `${symbol}-${interval}-justin-${analysis.signal}-${analysis.entry?.toFixed(2)}`;
-        if (lastLoggedRef.current !== key) {
-          lastLoggedRef.current = key;
-          addSignal({
-            symbol, timeframe: interval, strategy: 'Justin Setup',
-            signal: analysis.signal, entry: analysis.entry, sl: analysis.sl, tp: analysis.tp,
-            setupTime: analysis.setupTime,
-            currentPrice: primaryData.meta.regularMarketPrice
-          });
-        }
+      // For 5M: also fetch 4H, 1H, 15M to build HTF context for scenario matrix
+      if (interval === '5') {
+        try {
+          const primaryTicker2 = (SMT_PAIRS[symbol] || {}).ticker || `${symbol}=X`;
+          const [r4h, r1h, r15m] = await Promise.all([
+            fetch(`/api/finance/v8/finance/chart/${primaryTicker2}?interval=60m&range=1mo`).then(r => r.json()),
+            fetch(`/api/finance/v8/finance/chart/${primaryTicker2}?interval=60m&range=5d`).then(r => r.json()),
+            fetch(`/api/finance/v8/finance/chart/${primaryTicker2}?interval=15m&range=5d`).then(r => r.json()),
+          ]);
+          const raw4h  = aggregateRawTo4H(r4h.chart.result[0]);
+          const raw1h  = r1h.chart.result[0];
+          const raw15m = r15m.chart.result[0];
+          const sig4h  = analyzeJustinSetup(raw4h,  null, '240');
+          const sig1h  = analyzeJustinSetup(raw1h,  null, '60');
+          const sig15m = analyzeJustinSetup(raw15m, null, '15');
+          if (isMountedRef.current) {
+            setHtfContext({
+              h4Bull: sig4h.nearestBullFVG,  h4Bear: sig4h.nearestBearFVG,
+              h1Bull: sig1h.nearestBullFVG,  h1Bear: sig1h.nearestBearFVG,
+              m15Bull: sig15m.nearestBullFVG, m15Bear: sig15m.nearestBearFVG,
+            });
+          }
+        } catch (_) {}
       }
     } catch (err) {
       console.error(err);
@@ -373,42 +385,118 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     opacity: active ? 1 : 0.6
   });
 
-  return (
-    <div className={`chart-signal compact ${finalSignal.toLowerCase()}`}>
-      <div className="signal-left" style={{ width: '100%' }}>
-        <div className={`signal-badge-small ${finalSignal.toLowerCase()}`}>
-          {finalSignal === 'BUY' ? <TrendingUp size={10}/> : finalSignal === 'SELL' ? <TrendingDown size={10}/> : null}
-          {' '}Justin {finalSignal}
-        </div>
-        <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
-          {[tick1Text, tick2Text, tick3Text, tick4Text].map((text, i) => {
-            const active = [tick1Active, tick2Active, tick3Active, tick4Active][i];
-            return (
-              <div key={i} style={tickStyle(active)}>
-                {active ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
-                <span>0{i+1}. {text}</span>
-              </div>
-            );
-          })}
-        </div>
-        {finalSignal !== 'NEUTRAL' && (
-          <div className="signal-prices" style={{ marginTop: '8px' }}>
-            <div className="price-item">
-              <span className="price-label">Entry</span>
-              <span className="price-value">{entry?.toFixed(2)}</span>
-            </div>
-            <ArrowRight size={12} color="var(--border-color)" />
-            <div className="price-item">
-              <span className="price-label"><Target size={12}/> TP</span>
-              <span className="price-value tp">{tp?.toFixed(2)}</span>
-            </div>
-            <div className="price-item">
-              <span className="price-label"><ShieldAlert size={12}/> SL</span>
-              <span className="price-value sl">{sl?.toFixed(2)}</span>
-            </div>
-          </div>
-        )}
+  // ── Scenario Matrix Evaluation (5M) ──────────────────────────────────────
+  const scenario = htfContext ? evaluateScenario(htfContext, signalData?.currentPrice || 0) : null;
+
+  // Determine tick states based on scenario + 5M data
+  const isStrongBuy  = scenario?.scenario === 'STRONG_BUY';
+  const isStrongSell = scenario?.scenario === 'STRONG_SELL';
+
+  const sweepOk  = isStrongBuy  ? signalData?.sweep?.type === 'BUY_SWEEP'
+                 : isStrongSell ? signalData?.sweep?.type === 'SELL_SWEEP'
+                 : false;
+  const cisdOk   = isStrongBuy  ? signalData?.bullishCISD
+                 : isStrongSell ? signalData?.bearishCISD
+                 : false;
+
+  // Entry / SL / TP per spec:
+  // SELL: Entry at CISD candle high, SL above CISD high, TP at nearest bullish FVG below
+  // BUY:  Entry at CISD candle low,  SL below CISD low,  TP at nearest bearish FVG above
+  let fiveEntry, fiveSL, fiveTP, fiveSignal = 'NEUTRAL';
+  if (isStrongSell && sweepOk && cisdOk) {
+    fiveSignal = 'SELL';
+    fiveEntry  = signalData.cisdHigh;
+    fiveSL     = signalData.sweep.sweepHigh + signalData.atr * 0.1;
+    const targetFVG = signalData.nearestBullFVG;
+    fiveTP = targetFVG ? targetFVG.high : fiveEntry - (fiveSL - fiveEntry) * 2.5;
+  } else if (isStrongBuy && sweepOk && cisdOk) {
+    fiveSignal = 'BUY';
+    fiveEntry  = signalData.cisdLow;
+    fiveSL     = signalData.sweep.sweepLow - signalData.atr * 0.1;
+    const targetFVG = signalData.nearestBearFVG;
+    fiveTP = targetFVG ? targetFVG.low : fiveEntry + (fiveEntry - fiveSL) * 2.5;
+  }
+
+  // Auto-log when confirmed
+  useEffect(() => {
+    if (interval !== '5' || !scenario || fiveSignal === 'NEUTRAL' || !signalData) return;
+    const key = `${symbol}-5-justin-${fiveSignal}-${fiveEntry?.toFixed(5)}`;
+    if (lastLoggedRef.current !== key) {
+      lastLoggedRef.current = key;
+      addSignal({
+        symbol, timeframe: '5', strategy: 'Justin Setup',
+        signal: fiveSignal, entry: fiveEntry, sl: fiveSL, tp: fiveTP,
+        setupTime: signalData.setupTime, currentPrice: signalData.currentPrice
+      });
+    }
+  }, [fiveSignal, fiveEntry]);
+
+  const tickStyle = (active) => ({ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', opacity: active ? 1 : 0.45 });
+
+  if (!scenario) {
+    return (
+      <div className="chart-signal compact neutral">
+        <RefreshCw className="spin-icon" size={14} />
+        <span style={{ fontSize: '0.75rem' }}>Fetching HTF context...</span>
       </div>
+    );
+  }
+
+  const isMixed = scenario.scenario.startsWith('MIXED') || scenario.scenario === 'NEUTRAL';
+
+  return (
+    <div className={`chart-signal compact ${fiveSignal.toLowerCase()}`} style={{ flexDirection: 'column', gap: '8px' }}>
+      {/* Scenario Badge */}
+      <div style={{ fontWeight: 700, fontSize: '0.8rem', color: scenario.color, letterSpacing: '0.02em' }}>
+        {scenario.label}
+      </div>
+
+      {/* Tick Checklist — only shown for STRONG scenarios */}
+      {!isMixed && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', width: '100%' }}>
+          <div style={tickStyle(true)}>
+            {true ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+            <span>01. HTF Aligned ({isStrongBuy ? '4H+1H Bullish FVG, 15M in Bull FVG' : '4H+1H Bearish FVG, 15M in Bear FVG'})</span>
+          </div>
+          <div style={tickStyle(sweepOk)}>
+            {sweepOk ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+            <span>02. {isStrongBuy ? 'Sweep recent LOW' : 'Sweep recent HIGH'} on 5M
+              {sweepOk && signalData?.sweep ? ` (${(isStrongBuy ? signalData.sweep.sweepLow : signalData.sweep.sweepHigh)?.toFixed(5)})` : ''}
+            </span>
+          </div>
+          <div style={tickStyle(cisdOk)}>
+            {cisdOk ? <span style={{ color: 'var(--buy-green)' }}>✅</span> : <span>⭕</span>}
+            <span>03. CISD {isStrongBuy ? 'UP (close above prior down-close)' : 'DOWN (close below prior up-close)'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Interpretation + Action for MIXED */}
+      {isMixed && (
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <div style={{ color: scenario.color, marginBottom: '4px' }}>{scenario.interpretation}</div>
+          <div style={{ opacity: 0.8 }}>👉 {scenario.action}</div>
+        </div>
+      )}
+
+      {/* Entry prices when confirmed */}
+      {fiveSignal !== 'NEUTRAL' && (
+        <div className="signal-prices" style={{ marginTop: '4px' }}>
+          <div className="price-item">
+            <span className="price-label">Entry</span>
+            <span className="price-value">{fiveEntry?.toFixed(5)}</span>
+          </div>
+          <ArrowRight size={12} color="var(--border-color)" />
+          <div className="price-item">
+            <span className="price-label"><Target size={12}/> TP</span>
+            <span className="price-value tp">{fiveTP?.toFixed(5)}</span>
+          </div>
+          <div className="price-item">
+            <span className="price-label"><ShieldAlert size={12}/> SL</span>
+            <span className="price-value sl">{fiveSL?.toFixed(5)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
