@@ -380,10 +380,6 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     );
   }
 
-  const tickStyle = (active) => ({
-    display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem',
-    opacity: active ? 1 : 0.6
-  });
 
   // ── Scenario Matrix Evaluation (5M) ──────────────────────────────────────
   const scenario = htfContext ? evaluateScenario(htfContext, signalData?.currentPrice || 0) : null;
