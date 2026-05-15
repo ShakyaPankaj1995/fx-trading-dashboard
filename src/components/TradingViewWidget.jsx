@@ -289,7 +289,16 @@ const TradingViewWidget = ({ symbol, interval }) => {
           }
         }, 150);
 
-        chart.timeScale().fitContent();
+        // Default view: show last 30 candles (zoomed in)
+        if (formattedData.length > 0) {
+          const lastIndex = formattedData.length - 1;
+          const firstIndex = Math.max(0, lastIndex - 29);
+          chart.timeScale().setVisibleRange({
+            from: formattedData[firstIndex].time,
+            to: formattedData[lastIndex].time,
+          });
+        }
+
         setLoading(false);
       } catch (err) {
         if (isMounted) {
