@@ -146,56 +146,42 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     }
   }, [signalData, interval]);
 
-  // Log signal automatically if conditions met (5M only)
+  // Stores computed 5M scenario so we can read it after early returns without extra hooks
+  const fiveDataRef = useRef({ signal: 'NEUTRAL', scenario: null, entry: undefined, sl: undefined, tp: undefined });
+
+  // ── Combined 5M scenario evaluation + auto-log (runs before any early return) ──
   useEffect(() => {
-    if (interval === '5' && signalData && htfFVGs && addSignal) {
-      const cp = signalData.currentPrice;
-      let allBullish = true;
-      let allBearish = true;
-      let inFVGsCount = 0;
+    if (interval !== '5' || !htfContext || !signalData) return;
 
-      Object.entries(htfFVGs).forEach(([tf, fvgs]) => {
-        if (fvgs?.bullish && cp >= fvgs.bullish.low && cp <= fvgs.bullish.high) {
-          inFVGsCount++;
-          allBearish = false;
-        } else if (fvgs?.bearish && cp >= fvgs.bearish.low && cp <= fvgs.bearish.high) {
-          inFVGsCount++;
-          allBullish = false;
-        }
-      });
+    const scenarioResult = evaluateScenario(htfContext, signalData.currentPrice || 0);
+    const isSB = scenarioResult.scenario === 'STRONG_BUY';
+    const isSS = scenarioResult.scenario === 'STRONG_SELL';
 
-      const isAlignedBullish = inFVGsCount > 0 && allBullish;
-      const isAlignedBearish = inFVGsCount > 0 && allBearish;
+    const sweepOk = isSB ? signalData.sweep?.type === 'BUY_SWEEP'
+                  : isSS ? signalData.sweep?.type === 'SELL_SWEEP' : false;
+    const cisdOk  = isSB ? signalData.bullishCISD : isSS ? signalData.bearishCISD : false;
 
-      let finalSignal = 'NEUTRAL';
-      let entry, sl, tp;
+    let sig = 'NEUTRAL', ent, sl, tp;
+    if (isSS && sweepOk && cisdOk) {
+      sig = 'SELL'; ent = signalData.cisdHigh;
+      sl  = signalData.sweep.sweepHigh + signalData.atr * 0.1;
+      tp  = signalData.nearestBullFVG ? signalData.nearestBullFVG.high : ent - (sl - ent) * 2.5;
+    } else if (isSB && sweepOk && cisdOk) {
+      sig = 'BUY'; ent = signalData.cisdLow;
+      sl  = signalData.sweep.sweepLow - signalData.atr * 0.1;
+      tp  = signalData.nearestBearFVG ? signalData.nearestBearFVG.low : ent + (ent - sl) * 2.5;
+    }
 
-      if (isAlignedBullish && signalData.sweep?.type === 'BUY_SWEEP' && signalData.bullishCISD) {
-         finalSignal = 'BUY';
-         entry = signalData.cisdBullFVG ? signalData.cisdBullFVG.low : cp;
-         sl = signalData.sweep.sweepLow - signalData.atr * 0.1;
-         tp = entry + (entry - sl) * 2.5;
-      } else if (isAlignedBearish && signalData.sweep?.type === 'SELL_SWEEP' && signalData.bearishCISD) {
-         finalSignal = 'SELL';
-         entry = signalData.cisdBearFVG ? signalData.cisdBearFVG.high : cp;
-         sl = signalData.sweep.sweepHigh + signalData.atr * 0.1;
-         tp = entry - (sl - entry) * 2.5;
-      }
+    fiveDataRef.current = { signal: sig, scenario: scenarioResult, entry: ent, sl, tp };
 
-      if (finalSignal === 'BUY' || finalSignal === 'SELL') {
-        const key = `${symbol}-5-justin-${finalSignal}-${entry?.toFixed(2)}`;
-        if (lastLoggedRef.current !== key) {
-          lastLoggedRef.current = key;
-          addSignal({
-            symbol, timeframe: '5', strategy: 'Justin Setup',
-            signal: finalSignal, entry, sl, tp,
-            setupTime: signalData.setupTime,
-            currentPrice: cp
-          });
-        }
+    if (sig !== 'NEUTRAL') {
+      const key = `${symbol}-5-justin-${sig}-${ent?.toFixed(5)}`;
+      if (lastLoggedRef.current !== key) {
+        lastLoggedRef.current = key;
+        addSignal({ symbol, timeframe: '5', strategy: 'Justin Setup', signal: sig, entry: ent, sl, tp, setupTime: signalData.setupTime, currentPrice: signalData.currentPrice });
       }
     }
-  }, [signalData, htfFVGs, interval, symbol, addSignal]);
+  }, [htfContext, signalData, interval, symbol, addSignal]);
 
   // --- Step 2: Calculations based on signalData ---
   const cp = signalData?.currentPrice;
@@ -380,52 +366,14 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     );
   }
 
-
-  // ── Scenario Matrix Evaluation (5M) ──────────────────────────────────────
-  const scenario = htfContext ? evaluateScenario(htfContext, signalData?.currentPrice || 0) : null;
-
-  // Determine tick states based on scenario + 5M data
+  // Read 5M values computed by the effect above (avoids hooks after early returns)
+  const { signal: fiveSignal, scenario, entry: fiveEntry, sl: fiveSL, tp: fiveTP } = fiveDataRef.current;
   const isStrongBuy  = scenario?.scenario === 'STRONG_BUY';
   const isStrongSell = scenario?.scenario === 'STRONG_SELL';
-
-  const sweepOk  = isStrongBuy  ? signalData?.sweep?.type === 'BUY_SWEEP'
-                 : isStrongSell ? signalData?.sweep?.type === 'SELL_SWEEP'
-                 : false;
-  const cisdOk   = isStrongBuy  ? signalData?.bullishCISD
-                 : isStrongSell ? signalData?.bearishCISD
-                 : false;
-
-  // Entry / SL / TP per spec:
-  // SELL: Entry at CISD candle high, SL above CISD high, TP at nearest bullish FVG below
-  // BUY:  Entry at CISD candle low,  SL below CISD low,  TP at nearest bearish FVG above
-  let fiveEntry, fiveSL, fiveTP, fiveSignal = 'NEUTRAL';
-  if (isStrongSell && sweepOk && cisdOk) {
-    fiveSignal = 'SELL';
-    fiveEntry  = signalData.cisdHigh;
-    fiveSL     = signalData.sweep.sweepHigh + signalData.atr * 0.1;
-    const targetFVG = signalData.nearestBullFVG;
-    fiveTP = targetFVG ? targetFVG.high : fiveEntry - (fiveSL - fiveEntry) * 2.5;
-  } else if (isStrongBuy && sweepOk && cisdOk) {
-    fiveSignal = 'BUY';
-    fiveEntry  = signalData.cisdLow;
-    fiveSL     = signalData.sweep.sweepLow - signalData.atr * 0.1;
-    const targetFVG = signalData.nearestBearFVG;
-    fiveTP = targetFVG ? targetFVG.low : fiveEntry + (fiveEntry - fiveSL) * 2.5;
-  }
-
-  // Auto-log when confirmed
-  useEffect(() => {
-    if (interval !== '5' || !scenario || fiveSignal === 'NEUTRAL' || !signalData) return;
-    const key = `${symbol}-5-justin-${fiveSignal}-${fiveEntry?.toFixed(5)}`;
-    if (lastLoggedRef.current !== key) {
-      lastLoggedRef.current = key;
-      addSignal({
-        symbol, timeframe: '5', strategy: 'Justin Setup',
-        signal: fiveSignal, entry: fiveEntry, sl: fiveSL, tp: fiveTP,
-        setupTime: signalData.setupTime, currentPrice: signalData.currentPrice
-      });
-    }
-  }, [fiveSignal, fiveEntry]);
+  const sweepOk = isStrongBuy  ? signalData?.sweep?.type === 'BUY_SWEEP'
+                : isStrongSell ? signalData?.sweep?.type === 'SELL_SWEEP' : false;
+  const cisdOk  = isStrongBuy  ? signalData?.bullishCISD
+                : isStrongSell ? signalData?.bearishCISD : false;
 
   const tickStyle = (active) => ({ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', opacity: active ? 1 : 0.45 });
 
