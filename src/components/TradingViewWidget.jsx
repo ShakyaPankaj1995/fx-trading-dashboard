@@ -50,8 +50,7 @@ function aggregateRawTo4H(data) {
 const TradingViewWidget = ({ symbol, interval }) => {
   const chartContainerRef = useRef();
   const chartRef = useRef();
-  const fvgDimSeriesRef = useRef();
-  const fvgHighlightSeriesRef = useRef();
+  const fvgSeriesRef = useRef([]);
   const priceLinesRef = useRef([]);
   const { logs } = useSignalLogContext();
   const [loading, setLoading] = useState(true);
@@ -180,47 +179,40 @@ const TradingViewWidget = ({ symbol, interval }) => {
         const recentMitBull = (justinSignal.recentMitigatedBull || []).slice(0, 1);
         const recentMitBear = (justinSignal.recentMitigatedBear || []).slice(0, 1);
 
-        // Cleanup existing FVG series pool
-        if (!window.fvgSeriesPool) window.fvgSeriesPool = [];
-        window.fvgSeriesPool.forEach(s => { try { chart.removeSeries(s); } catch(e) {} });
-        window.fvgSeriesPool = [];
-
-        const drawFVGBox = (fvg, isBull, isMitigated, isActive) => {
+        // --- v4 FVG Rendering Logic (Shadow Hack) ---
+        const drawFVGBox = (fvg, isMitigated) => {
           if (!fvg || isNaN(fvg.high) || isNaN(fvg.low)) return;
-          
-          const series = chart.addCandlestickSeries({
-            upColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
-            downColor: isMitigated ? 'rgba(0,0,0,0)' : (isBull ? (isActive ? 'rgba(102, 255, 0, 0.65)' : 'rgba(102, 255, 0, 0.35)') : (isActive ? 'rgba(238, 75, 43, 0.65)' : 'rgba(238, 75, 43, 0.35)')),
-            borderVisible: isMitigated || isActive,
+
+          const fvgSeries = chart.addCandlestickSeries({
+            upColor: isMitigated ? 'rgba(102, 255, 0, 0.05)' : 'rgba(102, 255, 0, 0.25)',
+            downColor: isMitigated ? 'rgba(238, 75, 43, 0.05)' : 'rgba(238, 75, 43, 0.25)',
+            borderVisible: false,
             wickVisible: false,
             lastValueVisible: false,
             priceLineVisible: false,
-            borderUpColor: isBull ? 'rgba(102, 255, 0, 0.8)' : 'rgba(238, 75, 43, 0.8)',
-            borderDownColor: isBull ? 'rgba(102, 255, 0, 0.8)' : 'rgba(238, 75, 43, 0.8)',
           });
-          
+
           const boxData = formattedData
             .filter(d => d.time >= fvg.time)
             .map(d => ({
               time: d.time,
-              open: Number(fvg.high), close: Number(fvg.low),
-              high: Number(fvg.high), low: Number(fvg.low),
-            }))
-            .filter(d => !isNaN(d.open) && !isNaN(d.close));
-            
-          if (boxData.length > 0) {
-            series.setData(boxData);
-            window.fvgSeriesPool.push(series);
-          } else {
-            chart.removeSeries(series);
-          }
+              open: fvg.high, close: fvg.low,
+              high: fvg.high, low: fvg.low,
+            }));
+
+          fvgSeries.setData(boxData);
+          fvgSeriesRef.current.push(fvgSeries);
         };
 
-        // Draw only the "Mentioned" FVGs
-        if (nearestBull) drawFVGBox(nearestBull, true, false, true);
-        if (nearestBear) drawFVGBox(nearestBear, false, false, true);
-        if (recentMitBull[0]) drawFVGBox(recentMitBull[0], true, true, false);
-        if (recentMitBear[0]) drawFVGBox(recentMitBear[0], false, true, false);
+        // Cleanup old FVG series
+        fvgSeriesRef.current.forEach(s => { try { chart.removeSeries(s); } catch(e) {} });
+        fvgSeriesRef.current = [];
+
+        // Draw Recent Unmitigated & Mitigated
+        if (justinSignal.nearestBullFVG) drawFVGBox(justinSignal.nearestBullFVG, false);
+        if (justinSignal.nearestBearFVG) drawFVGBox(justinSignal.nearestBearFVG, false);
+        if (justinSignal.recentMitigatedBull?.[0]) drawFVGBox(justinSignal.recentMitigatedBull[0], true);
+        if (justinSignal.recentMitigatedBear?.[0]) drawFVGBox(justinSignal.recentMitigatedBear[0], true);
 
         // --- Active Trade Price Lines (Ultra-Safe decoupled version) ---
         setTimeout(() => {
@@ -331,8 +323,7 @@ const TradingViewWidget = ({ symbol, interval }) => {
       isMounted = false;
       resizeObserver.disconnect();
       try { chart.remove(); } catch(e) {}
-      fvgDimSeriesRef.current = null;
-      fvgHighlightSeriesRef.current = null;
+      fvgSeriesRef.current = [];
     };
   }, [symbol, interval, logs]);
 

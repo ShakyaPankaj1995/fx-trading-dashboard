@@ -11,7 +11,7 @@ const NavBar = ({ currentSymbol, onSymbolAdd, onOpenLog, onOpenEvents }) => {
     <nav className="navbar">
       <a href="/" className="nav-brand">
         <LineChart className="nav-brand-icon" size={28} />
-        <span>FX Master <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>v1.3.0</small></span>
+        <span>FX Master <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>v1.4.0</small></span>
       </a>
 
       <div className="nav-controls" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
