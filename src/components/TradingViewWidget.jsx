@@ -8,7 +8,6 @@ import { useSignalLogContext } from '../context/SignalLogContext';
 function aggregateTo4H(candles) {
   const groups = {};
   candles.forEach(c => {
-    // Group into 4-hour blocks (0:00, 4:00, 8:00, 12:00, 16:00, 20:00)
     const blockKey = Math.floor(c.time / (4 * 3600)) * (4 * 3600);
     if (!groups[blockKey]) {
       groups[blockKey] = { time: blockKey, open: c.open, high: c.high, low: c.low, close: c.close };
@@ -22,7 +21,6 @@ function aggregateTo4H(candles) {
   return Object.values(groups).sort((a, b) => a.time - b.time);
 }
 
-// Also aggregate raw Yahoo data for 4H analysis
 function aggregateRawTo4H(data) {
   const ts = data.timestamp;
   const q = data.indicators.quote[0];
@@ -40,7 +38,6 @@ function aggregateRawTo4H(data) {
     }
   }
   const sorted = Object.values(groups).sort((a, b) => a.time - b.time);
-  // Rebuild into Yahoo-like format for analyzeJustinSetup
   return {
     timestamp: sorted.map(c => c.time),
     indicators: { quote: [{ open: sorted.map(c => c.open), high: sorted.map(c => c.high), low: sorted.map(c => c.low), close: sorted.map(c => c.close) }] }
@@ -50,8 +47,8 @@ function aggregateRawTo4H(data) {
 const TradingViewWidget = ({ symbol, interval }) => {
   const chartContainerRef = useRef();
   const chartRef = useRef();
-  const fvgSeriesRef = useRef([]);
-  const priceLinesRef = useRef([]);
+  const fvgSeriesRef = useRef([]);   // All active FVG box series
+  const priceLinesRef = useRef([]);  // Active trade price lines (per-instance)
   const { logs } = useSignalLogContext();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,11 +56,13 @@ const TradingViewWidget = ({ symbol, interval }) => {
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const isForex = !['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(symbol);
-    const chartPrecision = isForex ? 5 : 2;
-    const minMove = isForex ? 0.00001 : 0.01;
+    // Precision by asset type
+    const isJPY = symbol.includes('JPY');
+    const isGoldOrIndex = ['GOLD', 'XAUUSD', 'S&P500', 'NASDAQ', 'SPX', 'NDX'].includes(symbol);
+    const chartPrecision = isJPY ? 3 : isGoldOrIndex ? 2 : 5;
+    const minMove = isJPY ? 0.001 : isGoldOrIndex ? 0.01 : 0.00001;
 
-    // Initialize Chart
+    // Create Chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { color: '#181a20' },
@@ -75,52 +74,35 @@ const TradingViewWidget = ({ symbol, interval }) => {
       },
       width: chartContainerRef.current.clientWidth || 400,
       height: chartContainerRef.current.clientHeight || 300,
-      timeScale: {
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      localization: {
-        priceFormatter: p => p.toFixed(chartPrecision),
-      },
+      timeScale: { timeVisible: true, secondsVisible: false },
+      localization: { priceFormatter: p => p.toFixed(chartPrecision) },
     });
 
-    // 1. Add Setup Series first (so they are BEHIND the candles)
+    // Series: TP/SL shaded zones (drawn FIRST, behind candles)
     const rewardSeries = chart.addAreaSeries({
       topColor: 'rgba(14, 203, 129, 0.3)',
       bottomColor: 'rgba(14, 203, 129, 0.05)',
       lineColor: 'rgba(14, 203, 129, 0.4)',
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      lineWidth: 1,
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, lineWidth: 1,
     });
-
     const riskSeries = chart.addAreaSeries({
       topColor: 'rgba(246, 70, 93, 0.3)',
       bottomColor: 'rgba(246, 70, 93, 0.05)',
       lineColor: 'rgba(246, 70, 93, 0.4)',
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      lineWidth: 1,
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, lineWidth: 1,
     });
 
-    // 2. Add Candle Series on top
+    // Series: Main Candles
     const candleSeries = chart.addCandlestickSeries({
-      upColor: '#0ecb81',
-      downColor: '#f6465d',
+      upColor: '#0ecb81', downColor: '#f6465d',
       borderVisible: false,
-      wickUpColor: '#0ecb81',
-      wickDownColor: '#f6465d',
-      priceFormat: {
-        type: 'price',
-        precision: chartPrecision,
-        minMove: minMove,
-      },
+      wickUpColor: '#0ecb81', wickDownColor: '#f6465d',
+      priceFormat: { type: 'price', precision: chartPrecision, minMove },
     });
 
     chartRef.current = chart;
-    priceLinesRef.current = []; // Reset local memory for this new chart instance
+    priceLinesRef.current = [];
+    fvgSeriesRef.current = [];
     let isMounted = true;
 
     const fetchData = async () => {
@@ -128,38 +110,38 @@ const TradingViewWidget = ({ symbol, interval }) => {
         setLoading(true);
         setError(null);
 
-        // Yahoo Finance intervals: use 60m for both 4H and 1H, then aggregate for 4H
-        let yfInterval = '15m';
-        let range = '5d';
-        switch(interval) {
+        // Yahoo Finance ticker & interval mapping
+        let yfInterval = '15m', range = '5d';
+        switch (interval) {
           case '240': yfInterval = '60m'; range = '1mo'; break;
-          case '60':  yfInterval = '60m'; range = '5d';  break;  // 1H: 5d range (not 1mo)
+          case '60':  yfInterval = '60m'; range = '5d';  break;
           case '15':  yfInterval = '15m'; range = '5d';  break;
           case '5':   yfInterval = '5m';  range = '5d';  break;
           default:    yfInterval = '15m'; range = '5d';
         }
 
         let yfSymbol = `${symbol}=X`;
-        if (symbol === 'SPX' || symbol === 'S&P500' || symbol === 'SP500') yfSymbol = 'ES=F';
-        else if (symbol === 'NDX' || symbol === 'NASDAQ') yfSymbol = 'NQ=F';
-        else if (symbol === 'XAUUSD' || symbol === 'GOLD') yfSymbol = 'GC=F';
+        if (['SPX', 'S&P500', 'SP500'].includes(symbol)) yfSymbol = 'ES=F';
+        else if (['NDX', 'NASDAQ'].includes(symbol))      yfSymbol = 'NQ=F';
+        else if (['XAUUSD', 'GOLD'].includes(symbol))     yfSymbol = 'GC=F';
 
         const res = await fetch(`/api/finance/v8/finance/chart/${yfSymbol}?interval=${yfInterval}&range=${range}`);
         if (!isMounted) return;
         if (!res.ok) throw new Error('Data fetch failed');
+
         const json = await res.json();
+        if (!json?.chart?.result?.[0]) throw new Error('Invalid data from API');
         const data = json.chart.result[0];
 
-        // Build raw formatted candles
+        // Build candles — filter out any null/NaN bars
         let formattedData = data.timestamp.map((time, i) => ({
-          time: time,
-          open: data.indicators.quote[0].open[i],
-          high: data.indicators.quote[0].high[i],
-          low: data.indicators.quote[0].low[i],
+          time,
+          open:  data.indicators.quote[0].open[i],
+          high:  data.indicators.quote[0].high[i],
+          low:   data.indicators.quote[0].low[i],
           close: data.indicators.quote[0].close[i],
         })).filter(d => d.open != null && d.high != null && d.low != null && d.close != null);
 
-        // For 4H: aggregate 60m candles into 4H candles
         let analysisData = data;
         if (interval === '240') {
           formattedData = aggregateTo4H(formattedData);
@@ -167,141 +149,154 @@ const TradingViewWidget = ({ symbol, interval }) => {
         }
 
         if (formattedData.length === 0) throw new Error('No data');
+        if (!isMounted) return;
 
         candleSeries.setData(formattedData);
 
-        // 3. Justin Setup Analysis (uses the correct-timeframe data)
-        const justinSignal = analyzeJustinSetup(analysisData, null, interval);
-        
-        // --- Multi-Series FVG Rendering (Limited to Mentioned Gaps) ---
-        const nearestBull = justinSignal.nearestBullFVG;
-        const nearestBear = justinSignal.nearestBearFVG;
-        const recentMitBull = (justinSignal.recentMitigatedBull || []).slice(0, 1);
-        const recentMitBear = (justinSignal.recentMitigatedBear || []).slice(0, 1);
+        // ================================================================
+        // FVG RENDERING — v4 Shadow Hack
+        // IMPORTANT: cleanup BEFORE creating new series to prevent accumulation
+        // ================================================================
+        fvgSeriesRef.current.forEach(s => { try { chart.removeSeries(s); } catch (e) {} });
+        fvgSeriesRef.current = [];
 
-        // --- v4 FVG Rendering Logic (Shadow Hack) ---
-        const drawFVGBox = (fvg, isMitigated) => {
-          if (!fvg || isNaN(fvg.high) || isNaN(fvg.low)) return;
+        const justinSignal = analyzeJustinSetup(analysisData, null, interval);
+
+        const drawFVGBox = (fvg, isBull, isMitigated) => {
+          const hi = Number(fvg?.high);
+          const lo = Number(fvg?.low);
+          if (!fvg || isNaN(hi) || isNaN(lo) || hi <= lo) return;
+
+          // Correct bull/bear colors
+          const fillColor = isBull
+            ? (isMitigated ? 'rgba(102, 255, 0, 0.08)'  : 'rgba(102, 255, 0, 0.28)')
+            : (isMitigated ? 'rgba(238, 75, 43, 0.08)'  : 'rgba(238, 75, 43, 0.28)');
+          const borderColor = isBull ? 'rgba(102, 255, 0, 0.6)' : 'rgba(238, 75, 43, 0.6)';
 
           const fvgSeries = chart.addCandlestickSeries({
-            upColor: isMitigated ? 'rgba(102, 255, 0, 0.05)' : 'rgba(102, 255, 0, 0.25)',
-            downColor: isMitigated ? 'rgba(238, 75, 43, 0.05)' : 'rgba(238, 75, 43, 0.25)',
-            borderVisible: false,
-            wickVisible: false,
+            upColor:          fillColor,
+            downColor:        fillColor,
+            borderVisible:    isMitigated,
+            borderUpColor:    borderColor,
+            borderDownColor:  borderColor,
+            wickVisible:      false,
             lastValueVisible: false,
             priceLineVisible: false,
           });
 
           const boxData = formattedData
             .filter(d => d.time >= fvg.time)
-            .map(d => ({
-              time: d.time,
-              open: fvg.high, close: fvg.low,
-              high: fvg.high, low: fvg.low,
-            }));
+            .map(d => ({ time: d.time, open: hi, close: lo, high: hi, low: lo }));
 
-          fvgSeries.setData(boxData);
-          fvgSeriesRef.current.push(fvgSeries);
+          if (boxData.length > 0) {
+            fvgSeries.setData(boxData);
+            fvgSeriesRef.current.push(fvgSeries);
+          } else {
+            try { chart.removeSeries(fvgSeries); } catch (e) {}
+          }
         };
 
-        // Cleanup old FVG series
-        fvgSeriesRef.current.forEach(s => { try { chart.removeSeries(s); } catch(e) {} });
-        fvgSeriesRef.current = [];
+        // 1 unmitigated bull + 1 unmitigated bear + 1 mitigated bull + 1 mitigated bear
+        if (justinSignal.nearestBullFVG)           drawFVGBox(justinSignal.nearestBullFVG,          true,  false);
+        if (justinSignal.nearestBearFVG)           drawFVGBox(justinSignal.nearestBearFVG,          false, false);
+        if (justinSignal.recentMitigatedBull?.[0]) drawFVGBox(justinSignal.recentMitigatedBull[0],  true,  true);
+        if (justinSignal.recentMitigatedBear?.[0]) drawFVGBox(justinSignal.recentMitigatedBear[0],  false, true);
 
-        // Draw Recent Unmitigated & Mitigated
-        if (justinSignal.nearestBullFVG) drawFVGBox(justinSignal.nearestBullFVG, false);
-        if (justinSignal.nearestBearFVG) drawFVGBox(justinSignal.nearestBearFVG, false);
-        if (justinSignal.recentMitigatedBull?.[0]) drawFVGBox(justinSignal.recentMitigatedBull[0], true);
-        if (justinSignal.recentMitigatedBear?.[0]) drawFVGBox(justinSignal.recentMitigatedBear[0], true);
+        // ================================================================
+        // STRATEGY SIGNAL ZONES (Trendline / CRT / Justin detected signal)
+        // ================================================================
+        const trendSignal = analyzeData(analysisData, interval);
+        const crtSignal   = analyzeCRTData(analysisData, interval);
 
-        // --- Active Trade Price Lines (Ultra-Safe decoupled version) ---
-        setTimeout(() => {
-          if (!isMounted || !candleSeries) return;
-          const activeTrade = logs?.find(l => 
-            l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
+        const activeSignal =
+          (justinSignal.signal === 'BUY' || justinSignal.signal === 'SELL') ? justinSignal :
+          (crtSignal.signal   === 'BUY' || crtSignal.signal   === 'SELL') ? crtSignal :
+          (trendSignal.signal === 'BUY' || trendSignal.signal === 'SELL') ? trendSignal : null;
+
+        if (activeSignal?.setupTime) {
+          const isSell = activeSignal.signal === 'SELL';
+
+          rewardSeries.applyOptions(isSell
+            ? { topColor: 'rgba(246, 70, 93, 0.3)',  bottomColor: 'rgba(246, 70, 93, 0.05)',  lineColor: 'rgba(246, 70, 93, 0.4)'  }
+            : { topColor: 'rgba(14, 203, 129, 0.3)', bottomColor: 'rgba(14, 203, 129, 0.05)', lineColor: 'rgba(14, 203, 129, 0.4)' }
+          );
+          riskSeries.applyOptions(isSell
+            ? { topColor: 'rgba(14, 203, 129, 0.3)', bottomColor: 'rgba(14, 203, 129, 0.05)', lineColor: 'rgba(14, 203, 129, 0.4)' }
+            : { topColor: 'rgba(246, 70, 93, 0.3)',  bottomColor: 'rgba(246, 70, 93, 0.05)',  lineColor: 'rgba(246, 70, 93, 0.4)'  }
           );
 
-          if (activeTrade) {
-            try {
+          const startTime = Math.max(activeSignal.setupTime, formattedData[0].time);
+          const points    = formattedData.filter(d => d.time >= startTime);
+
+          if (points.length >= 1) {
+            rewardSeries.setData(points.map(d => ({ time: d.time, value: isSell ? activeSignal.sl : activeSignal.tp })));
+            riskSeries.setData(  points.map(d => ({ time: d.time, value: isSell ? activeSignal.tp : activeSignal.sl })));
+          }
+
+          // Signal price lines — use hex colors (CSS vars not supported in canvas)
+          const sigTitle = activeSignal === justinSignal ? 'JUSTIN' : activeSignal === crtSignal ? 'CRT' : 'TREND';
+          candleSeries.createPriceLine({ price: Number(activeSignal.entry), color: '#3b82f6', lineWidth: 2, title: `${sigTitle} ENTRY` });
+          candleSeries.createPriceLine({ price: Number(activeSignal.tp),    color: '#0ecb81', lineWidth: 1, lineStyle: 2, title: 'TARGET' });
+          candleSeries.createPriceLine({ price: Number(activeSignal.sl),    color: '#f6465d', lineWidth: 1, lineStyle: 2, title: 'STOP'   });
+        } else {
+          rewardSeries.setData([]);
+          riskSeries.setData([]);
+        }
+
+        // ================================================================
+        // ACTIVE TRADE LINES (from Signal Log)
+        // Runs 150ms after chart renders — fully decoupled so it cannot crash the chart
+        // ================================================================
+        setTimeout(() => {
+          if (!isMounted || !candleSeries) return;
+          try {
+            const activeTrade = logs?.find(l =>
+              l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
+            );
+
+            // Always clear previous logged-trade lines first
+            priceLinesRef.current.forEach(l => { try { candleSeries.removePriceLine(l); } catch (e) {} });
+            priceLinesRef.current = [];
+
+            if (activeTrade && formattedData.length > 0) {
               const currentPrice = formattedData[formattedData.length - 1].close;
               const entry = Number(activeTrade.entry);
-              const tp = Number(activeTrade.tp);
-              const sl = Number(activeTrade.sl);
+              const tp    = Number(activeTrade.tp);
+              const sl    = Number(activeTrade.sl);
 
-              // Only draw if within 25% of current price to prevent chart scaling crashes
-              const limit = currentPrice * 0.25;
-              const safe = (p) => !isNaN(p) && p > 0 && Math.abs(p - currentPrice) < limit;
+              // Only draw if within 25% of market price (prevents crashes from stale/mismatched data)
+              const limit  = currentPrice * 0.25;
+              const isSafe = p => !isNaN(p) && p > 0 && Math.abs(p - currentPrice) < limit;
 
-              if (safe(entry)) {
-                // Clear any existing lines for this ref
-                priceLinesRef.current.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e) {} });
-                priceLinesRef.current = [];
-
-                const eLine = candleSeries.createPriceLine({
-                  price: entry, color: 'var(--accent-blue)', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'ENTRY'
-                });
-                priceLinesRef.current.push(eLine);
-
-                if (safe(tp)) {
+              if (isSafe(entry)) {
+                priceLinesRef.current.push(candleSeries.createPriceLine({
+                  price: entry, color: '#3b82f6', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'ENTRY'
+                }));
+                if (isSafe(tp)) {
                   priceLinesRef.current.push(candleSeries.createPriceLine({
-                    price: tp, color: 'var(--buy-green)', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'TP'
+                    price: tp, color: '#0ecb81', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'TP'
                   }));
                 }
-                if (safe(sl)) {
+                if (isSafe(sl)) {
                   priceLinesRef.current.push(candleSeries.createPriceLine({
-                    price: sl, color: 'var(--sell-red)', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'SL'
+                    price: sl, color: '#f6465d', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'SL'
                   }));
                 }
               }
-            } catch (err) {
-              console.error('[Chart] Price line drawing failed:', err.message);
             }
+          } catch (err) {
+            console.error('[Chart] Trade line error:', err.message);
           }
-        }, 100);
-
-        // Analysis for Trendline / CRT / Justin
-        const trendSignal = analyzeData(analysisData, interval);
-        const crtSignal = analyzeCRTData(analysisData, interval);
-        
-        const activeSignal = (justinSignal.signal === 'BUY' || justinSignal.signal === 'SELL') ? justinSignal :
-                             (crtSignal.signal === 'BUY' || crtSignal.signal === 'SELL') ? crtSignal : 
-                             (trendSignal.signal === 'BUY' || trendSignal.signal === 'SELL') ? trendSignal : null;
-
-        if (activeSignal && activeSignal.setupTime) {
-          // Handle Short vs Long coloring
-          if (activeSignal.signal === 'SELL') {
-             rewardSeries.applyOptions({ 
-               topColor: 'rgba(246, 70, 93, 0.3)', bottomColor: 'rgba(246, 70, 93, 0.05)', lineColor: 'rgba(246, 70, 93, 0.4)' 
-             });
-             riskSeries.applyOptions({ 
-               topColor: 'rgba(14, 203, 129, 0.3)', bottomColor: 'rgba(14, 203, 129, 0.05)', lineColor: 'rgba(14, 203, 129, 0.4)' 
-             });
-          }
-
-          const startTime = Math.max(activeSignal.setupTime, formattedData[0].time);
-          const points = formattedData.filter(d => d.time >= startTime);
-          
-          if (points.length >= 1) {
-            const rewardPoints = points.map(d => ({ time: d.time, value: activeSignal.signal === 'BUY' ? activeSignal.tp : activeSignal.sl }));
-            const riskPoints = points.map(d => ({ time: d.time, value: activeSignal.signal === 'BUY' ? activeSignal.sl : activeSignal.tp }));
-            
-            rewardSeries.setData(rewardPoints);
-            riskSeries.setData(riskPoints);
-          }
-
-          // Price Lines
-          const title = activeSignal === justinSignal ? 'JUSTIN' : activeSignal === crtSignal ? 'CRT' : 'TREND';
-          candleSeries.createPriceLine({ price: activeSignal.entry, color: '#3b82f6', lineWidth: 2, title: `${title} ENTRY` });
-          candleSeries.createPriceLine({ price: activeSignal.tp, color: '#0ecb81', lineWidth: 1, lineStyle: 2, title: 'TARGET' });
-          candleSeries.createPriceLine({ price: activeSignal.sl, color: '#f6465d', lineWidth: 1, lineStyle: 2, title: 'STOP' });
-        }
+        }, 150);
 
         chart.timeScale().fitContent();
         setLoading(false);
       } catch (err) {
-        console.error(err);
-        setError(err.message);
-        setLoading(false);
+        if (isMounted) {
+          console.error('[Chart]', err);
+          setError(err.message);
+          setLoading(false);
+        }
       }
     };
 
@@ -315,15 +310,15 @@ const TradingViewWidget = ({ symbol, interval }) => {
         });
       }
     };
-
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(chartContainerRef.current);
 
     return () => {
       isMounted = false;
       resizeObserver.disconnect();
-      try { chart.remove(); } catch(e) {}
       fvgSeriesRef.current = [];
+      priceLinesRef.current = [];
+      try { chart.remove(); } catch (e) {}
     };
   }, [symbol, interval, logs]);
 
