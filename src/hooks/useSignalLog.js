@@ -80,6 +80,17 @@ export function useSignalLog() {
     } catch (e) { /* fallback: proceed if news check fails */ }
 
     setLogs(prev => {
+      // CHECK 2: Signal Conflict — block if opposing direction already active for this pair
+      const hasConflict = prev.some(log =>
+        log.symbol === signal.symbol &&
+        log.status === 'ACTIVE' &&
+        log.signal !== signal.signal
+      );
+      if (hasConflict) {
+        alert(`⚠️ Signal Conflict: An opposing ${signal.signal === 'BUY' ? 'SELL' : 'BUY'} trade is already active for ${signal.symbol}. Cannot log conflicting signal.`);
+        return prev;
+      }
+
       // 2. Don't log if an ACTIVE trade exists for same symbol+timeframe+strategy+direction
       const hasActiveMatch = prev.some(log =>
         log.symbol === signal.symbol &&

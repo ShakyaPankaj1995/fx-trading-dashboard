@@ -93,7 +93,27 @@ export default async function handler(req, res) {
       });
     };
 
-    // 2. Identify new signals
+    // 2. Pre-fetch 4H and 1H bias for all assets (HTF Alignment Check)
+    const htfBias = {}; // { 'EURUSD': { h4: 'BUY'|'SELL'|null, h1: 'BUY'|'SELL'|null } }
+    for (const asset of ASSETS) {
+      try {
+        const [data4h, data1h] = await Promise.all([
+          fetchYF(asset.ticker, '60m', '1mo'),
+          fetchYF(asset.ticker, '60m', '5d'),
+        ]);
+        // 4H bias: aggregate 60m into 4H and get trend direction via analyzeJustinSetup
+        const justin4h = analyzeJustinSetup(data4h, null, '240');
+        const justin1h = analyzeJustinSetup(data1h, null, '60');
+        htfBias[asset.name] = {
+          h4: justin4h.signal === 'BUY' || justin4h.signal === 'SELL' ? justin4h.signal : null,
+          h1: justin1h.signal === 'BUY' || justin1h.signal === 'SELL' ? justin1h.signal : null,
+        };
+      } catch (e) {
+        htfBias[asset.name] = { h4: null, h1: null };
+      }
+    }
+
+    // 3. Identify new signals
     for (const asset of ASSETS) {
       for (const tf of TIMEFRAMES) {
         try {
@@ -109,7 +129,7 @@ export default async function handler(req, res) {
           // Run CRT Strategy
           const crtAnalysis = analyzeCRTData(chartData, tf.val);
           if (crtAnalysis.signal === 'BUY' || crtAnalysis.signal === 'SELL') {
-            logs = addLogIfNew(logs, asset.name, tf.val, 'CRT (AMD)', crtAnalysis);
+            logs = addLogIfNew(logs, asset.name, tf.val, 'CRT (AMD)', crtAnalysis, htfBias[asset.name]);
           }
 
           // Run Justin Setup (with SMT correlated asset)
@@ -125,7 +145,7 @@ export default async function handler(req, res) {
           }
           const justinAnalysis = analyzeJustinSetup(chartData, correlatedData, tf.val);
           if (justinAnalysis.signal === 'BUY' || justinAnalysis.signal === 'SELL') {
-            logs = addLogIfNew(logs, asset.name, tf.val, 'Justin Setup', justinAnalysis);
+            logs = addLogIfNew(logs, asset.name, tf.val, 'Justin Setup', justinAnalysis, htfBias[asset.name]);
           }
         } catch (e) {
           console.error(`Error processing ${asset.name} ${tf.val}:`, e.message);
@@ -183,22 +203,49 @@ export default async function handler(req, res) {
   }
 }
 
-function addLogIfNew(logs, symbol, timeframe, strategy, analysis) {
+function addLogIfNew(logs, symbol, timeframe, strategy, analysis, htfBias = {}) {
   const tenMinsAgo = Date.now() - 10 * 60 * 1000;
-  
-  // Deduplicate: Don't add if the same signal exists for this asset/tf/strategy recently
-  const isDuplicate = logs.some(log => 
+  const direction = analysis.signal; // 'BUY' or 'SELL'
+
+  // ── CHECK 1: HTF Bias Alignment (4H and 1H must agree) ──
+  // Only enforce on 15M and 5M entries (HTF IS the 4H/1H)
+  if (timeframe === '15' || timeframe === '5') {
+    const { h4, h1 } = htfBias;
+    // If we have a clear 4H bias and it disagrees → skip
+    if (h4 && h4 !== direction) {
+      console.log(`[Cron] ❌ HTF BLOCK: ${symbol} ${timeframe}M ${direction} rejected — 4H says ${h4}`);
+      return logs;
+    }
+    // If we have a clear 1H bias and it disagrees → skip
+    if (h1 && h1 !== direction) {
+      console.log(`[Cron] ❌ HTF BLOCK: ${symbol} ${timeframe}M ${direction} rejected — 1H says ${h1}`);
+      return logs;
+    }
+  }
+
+  // ── CHECK 2: Signal Conflict (no opposing active signals for this pair) ──
+  const hasConflict = logs.some(log =>
+    log.symbol === symbol &&
+    log.status === 'ACTIVE' &&
+    log.signal !== direction   // A different strategy is already active in OPPOSITE direction
+  );
+  if (hasConflict) {
+    console.log(`[Cron] ⚠️ CONFLICT BLOCK: ${symbol} ${timeframe} ${direction} rejected — opposing active signal exists`);
+    return logs;
+  }
+
+  // ── DEDUP: Don't add if same signal already active recently ──
+  const isDuplicate = logs.some(log =>
     log.symbol === symbol &&
     log.timeframe === timeframe &&
     log.strategy === strategy &&
-    log.signal === analysis.signal &&
+    log.signal === direction &&
     log.status === 'ACTIVE' &&
     new Date(log.timestamp).getTime() > tenMinsAgo
   );
-
   if (isDuplicate) return logs;
 
-  const rr = analysis.signal === 'BUY'
+  const rr = direction === 'BUY'
     ? ((analysis.tp - analysis.entry) / (analysis.entry - analysis.sl)).toFixed(2)
     : ((analysis.entry - analysis.tp) / (analysis.sl - analysis.entry)).toFixed(2);
 
@@ -208,7 +255,7 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis) {
     symbol,
     timeframe,
     strategy,
-    signal: analysis.signal,
+    signal: direction,
     entry: analysis.entry,
     sl: analysis.sl,
     tp: analysis.tp,
@@ -217,5 +264,6 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis) {
     closedAt: null,
   };
 
+  console.log(`[Cron] ✅ LOGGED: ${symbol} ${timeframe} ${direction} (${strategy}) Entry:${analysis.entry}`);
   return [newLog, ...logs];
 }
