@@ -47,12 +47,15 @@ function aggregateRawTo4H(data) {
 const TradingViewWidget = ({ symbol, interval }) => {
   const chartContainerRef = useRef();
   const chartRef = useRef();
-  const fvgSeriesRef = useRef([]);   // All active FVG box series
-  const priceLinesRef = useRef([]);  // Active trade price lines (per-instance)
+  const fvgSeriesRef = useRef([]);
+  const priceLinesRef = useRef([]);
+  const candleSeriesRef = useRef(null);   // kept across renders for trade line updates
+  const formattedDataRef = useRef([]);    // kept across renders for trade line price check
   const { logs } = useSignalLogContext();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // ── Effect 1: Rebuild chart only when pair/timeframe changes ──
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -152,6 +155,9 @@ const TradingViewWidget = ({ symbol, interval }) => {
         if (!isMounted) return;
 
         candleSeries.setData(formattedData);
+        // Store refs so the trade-line effect can access them without a chart rebuild
+        candleSeriesRef.current = candleSeries;
+        formattedDataRef.current = formattedData;
 
         // ================================================================
         // FVG RENDERING — v4 Shadow Hack
@@ -243,51 +249,6 @@ const TradingViewWidget = ({ symbol, interval }) => {
           riskSeries.setData([]);
         }
 
-        // ================================================================
-        // ACTIVE TRADE LINES (from Signal Log)
-        // Runs 150ms after chart renders — fully decoupled so it cannot crash the chart
-        // ================================================================
-        setTimeout(() => {
-          if (!isMounted || !candleSeries) return;
-          try {
-            const activeTrade = logs?.find(l =>
-              l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
-            );
-
-            // Always clear previous logged-trade lines first
-            priceLinesRef.current.forEach(l => { try { candleSeries.removePriceLine(l); } catch (e) {} });
-            priceLinesRef.current = [];
-
-            if (activeTrade && formattedData.length > 0) {
-              const currentPrice = formattedData[formattedData.length - 1].close;
-              const entry = Number(activeTrade.entry);
-              const tp    = Number(activeTrade.tp);
-              const sl    = Number(activeTrade.sl);
-
-              // Only draw if within 25% of market price (prevents crashes from stale/mismatched data)
-              const limit  = currentPrice * 0.25;
-              const isSafe = p => !isNaN(p) && p > 0 && Math.abs(p - currentPrice) < limit;
-
-              if (isSafe(entry)) {
-                priceLinesRef.current.push(candleSeries.createPriceLine({
-                  price: entry, color: '#3b82f6', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'ENTRY'
-                }));
-                if (isSafe(tp)) {
-                  priceLinesRef.current.push(candleSeries.createPriceLine({
-                    price: tp, color: '#0ecb81', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'TP'
-                  }));
-                }
-                if (isSafe(sl)) {
-                  priceLinesRef.current.push(candleSeries.createPriceLine({
-                    price: sl, color: '#f6465d', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'SL'
-                  }));
-                }
-              }
-            }
-          } catch (err) {
-            console.error('[Chart] Trade line error:', err.message);
-          }
-        }, 150);
 
         // Default view: show last 30 candles (zoomed in)
         if (formattedData.length > 0) {
@@ -329,7 +290,47 @@ const TradingViewWidget = ({ symbol, interval }) => {
       priceLinesRef.current = [];
       try { chart.remove(); } catch (e) {}
     };
-  }, [symbol, interval, logs]);
+  }, [symbol, interval]);
+
+  // ── Effect 2: Update trade lines only when logs change (no chart rebuild) ──
+  useEffect(() => {
+    const candleSeries = candleSeriesRef.current;
+    const formattedData = formattedDataRef.current;
+    if (!candleSeries || !formattedData.length) return;
+
+    try {
+      // Clear previous trade lines
+      priceLinesRef.current.forEach(l => { try { candleSeries.removePriceLine(l); } catch (e) {} });
+      priceLinesRef.current = [];
+
+      const activeTrade = logs?.find(l =>
+        l.status === 'ACTIVE' && l.symbol === symbol && l.timeframe === interval
+      );
+
+      if (!activeTrade) return;
+
+      const currentPrice = formattedData[formattedData.length - 1].close;
+      const entry = Number(activeTrade.entry);
+      const tp    = Number(activeTrade.tp);
+      const sl    = Number(activeTrade.sl);
+      const limit  = currentPrice * 0.25;
+      const isSafe = p => !isNaN(p) && p > 0 && Math.abs(p - currentPrice) < limit;
+
+      if (isSafe(entry)) {
+        priceLinesRef.current.push(candleSeries.createPriceLine({
+          price: entry, color: '#3b82f6', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: 'ENTRY'
+        }));
+        if (isSafe(tp)) priceLinesRef.current.push(candleSeries.createPriceLine({
+          price: tp, color: '#0ecb81', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'TP'
+        }));
+        if (isSafe(sl)) priceLinesRef.current.push(candleSeries.createPriceLine({
+          price: sl, color: '#f6465d', lineWidth: 2, lineStyle: 1, axisLabelVisible: true, title: 'SL'
+        }));
+      }
+    } catch (err) {
+      console.error('[Chart] Trade line update error:', err.message);
+    }
+  }, [logs, symbol, interval]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
