@@ -244,9 +244,7 @@ const SignalLogModal = ({ onClose, onSelectSymbol }) => {
 
   const filteredLogs = useMemo(() => {
     const base = activeTab === 'all' ? logs : logs.filter(l => l.strategy === activeTab);
-    const active  = base.filter(l => l.status === 'ACTIVE').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    const closed  = base.filter(l => l.status !== 'ACTIVE').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    return [...active, ...closed];
+    return [...base].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }, [logs, activeTab]);
 
   const stats = useMemo(() => calcStats(filteredLogs), [filteredLogs]);
