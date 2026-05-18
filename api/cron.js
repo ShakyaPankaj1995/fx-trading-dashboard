@@ -227,16 +227,30 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis, htfBias = {}) 
     return logs;
   }
 
-  // ── CHECK 2: One Trade Per Timeframe Slot ──
-  // Multiple trades on same pair allowed if on DIFFERENT timeframes
-  const hasActiveMatchOnSameTF = logs.some(log =>
+  // ── CHECK 2: Timeframe Slot Rule ──
+  // Normally 1 trade per TF. Exception: Can have 2 trades if they are from Trendline and CRT respectively.
+  const activeSameTF = logs.filter(log =>
     log.symbol === symbol &&
     log.status === 'ACTIVE' &&
     log.timeframe === timeframe
   );
-  if (hasActiveMatchOnSameTF) {
-    console.log(`[Cron] ⚠️ TF SLOT BLOCK: ${symbol} ${timeframe}M ${direction} rejected — active trade exists on this timeframe slot`);
-    return logs;
+
+  if (activeSameTF.length >= 2) {
+    console.log(`[Cron] ⚠️ TF SLOT BLOCK: ${symbol} ${timeframe}M rejected — max 2 trades reached`);
+    return logs; 
+  }
+
+  if (activeSameTF.length === 1) {
+    const existingStrat = activeSameTF[0].strategy;
+    const isCRTorTrendline = (s) => s === 'CRT (AMD)' || s === 'Trendline';
+    
+    // Only allow second trade if both are within {CRT, Trendline} and are different strategies
+    if (isCRTorTrendline(strategy) && isCRTorTrendline(existingStrat) && strategy !== existingStrat) {
+      // Allowed!
+    } else {
+      console.log(`[Cron] ⚠️ TF SLOT BLOCK: ${symbol} ${timeframe}M ${direction} rejected — slot full (requires Trendline + CRT combo for 2 trades)`);
+      return logs;
+    }
   }
 
   // ── DEDUP: Don't add if same signal already active recently ──

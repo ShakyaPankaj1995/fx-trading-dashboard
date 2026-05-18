@@ -91,13 +91,24 @@ export function useSignalLog() {
         return prev;
       }
 
-      // 2. Don't log if an ACTIVE trade exists for same symbol+timeframe
-      const hasActiveMatchOnSameTF = prev.some(log =>
+      // 1. Timeframe Slot Rule: Normally 1 trade per TF.
+      // Exception: Can have 2 trades if they are from Trendline and CRT respectively.
+      const activeSameTF = prev.filter(log =>
         log.symbol === signal.symbol &&
         log.status === 'ACTIVE' &&
         log.timeframe === signal.timeframe
       );
-      if (hasActiveMatchOnSameTF) return prev;
+
+      if (activeSameTF.length >= 2) return prev;
+
+      if (activeSameTF.length === 1) {
+        const existingStrat = activeSameTF[0].strategy;
+        const isCRTorTrendline = (s) => s === 'CRT (AMD)' || s === 'Trendline';
+        
+        if (!(isCRTorTrendline(signal.strategy) && isCRTorTrendline(existingStrat) && signal.strategy !== existingStrat)) {
+          return prev;
+        }
+      }
 
       // 2. Don't log if a trade with very similar entry existed recently (2 hours)
       const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
