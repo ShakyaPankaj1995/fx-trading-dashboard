@@ -126,10 +126,10 @@ export function useSignalLog() {
         if (signal.signal === 'BUY' && (live >= tpVal || live <= slVal)) return prev;
         if (signal.signal === 'SELL' && (live <= tpVal || live >= slVal)) return prev;
 
-        // 2. Reject if it is too far from entry (Max allowed deviation is 80% of the distance to TP)
+        // 2. Reject if it is too far from entry (Max allowed deviation is 15% of the distance to TP)
         const tpDistance = Math.abs(tpVal - entryVal);
         const liveDistance = Math.abs(live - entryVal);
-        if (liveDistance > tpDistance * 0.8) {
+        if (liveDistance > tpDistance * 0.15) {
           console.log(`[SignalLog] Rejected stale signal: Entry ${entryVal}, but live price is ${live}`);
           return prev;
         }
