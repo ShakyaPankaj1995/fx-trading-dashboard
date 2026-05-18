@@ -242,7 +242,7 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis, htfBias = {}) 
 
   if (activeSameTF.length === 1) {
     const existingStrat = activeSameTF[0].strategy;
-    const isCRTorTrendline = (s) => s === 'CRT (AMD)' || s === 'Trendline';
+    const isCRTorTrendline = (s) => s === 'CRT (AMD)' || s === 'Trendline Strategy';
     
     // Only allow second trade if both are within {CRT, Trendline} and are different strategies
     if (isCRTorTrendline(strategy) && isCRTorTrendline(existingStrat) && strategy !== existingStrat) {

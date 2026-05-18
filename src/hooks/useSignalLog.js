@@ -92,7 +92,7 @@ export function useSignalLog() {
 
       if (activeSameTF.length === 1) {
         const existingStrat = activeSameTF[0].strategy;
-        const isCRTorTrendline = (s) => s === 'CRT (AMD)' || s === 'Trendline';
+        const isCRTorTrendline = (s) => s === 'CRT (AMD)' || s === 'Trendline Strategy';
         
         if (!(isCRTorTrendline(signal.strategy) && isCRTorTrendline(existingStrat) && signal.strategy !== existingStrat)) {
           return prev;
@@ -126,10 +126,10 @@ export function useSignalLog() {
         if (signal.signal === 'BUY' && (live >= tpVal || live <= slVal)) return prev;
         if (signal.signal === 'SELL' && (live <= tpVal || live >= slVal)) return prev;
 
-        // 2. Reject if it is too far from entry (Max allowed deviation is 30% of the distance to TP)
+        // 2. Reject if it is too far from entry (Max allowed deviation is 80% of the distance to TP)
         const tpDistance = Math.abs(tpVal - entryVal);
         const liveDistance = Math.abs(live - entryVal);
-        if (liveDistance > tpDistance * 0.3) {
+        if (liveDistance > tpDistance * 0.8) {
           console.log(`[SignalLog] Rejected stale signal: Entry ${entryVal}, but live price is ${live}`);
           return prev;
         }
