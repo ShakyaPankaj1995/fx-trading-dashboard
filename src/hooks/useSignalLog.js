@@ -137,9 +137,23 @@ export function useSignalLog() {
         }
       }
 
-      const rr = signal.signal === 'BUY'
-        ? ((tpVal - entryVal) / Math.abs(entryVal - slVal)).toFixed(2)
-        : ((entryVal - tpVal) / Math.abs(slVal - entryVal)).toFixed(2);
+      // ── Block 4H trades ──
+      if (signal.timeframe === '240') return prev;
+
+      // ── R/R Filter: min 1:1.5, max 1:3 ──
+      const risk = Math.abs(entryVal - slVal);
+      if (risk <= 0) return prev;
+
+      const maxTP = signal.signal === 'BUY' ? entryVal + risk * 3 : entryVal - risk * 3;
+      const clampedTP = signal.signal === 'BUY' ? Math.min(tpVal, maxTP) : Math.max(tpVal, maxTP);
+      const actualRR = Math.abs(clampedTP - entryVal) / risk;
+
+      if (actualRR < 1.5) {
+        console.log(`[SignalLog] Rejected low R/R: ${signal.symbol} R/R=${actualRR.toFixed(2)} (min 1.5)`);
+        return prev;
+      }
+
+      const rr = actualRR.toFixed(2);
 
       // ALWAYS use current time as the log timestamp (not the candle timestamp)
       // The candle timestamp (setupTime) is stored separately for reference
@@ -153,7 +167,7 @@ export function useSignalLog() {
         signal: signal.signal,
         entry: entryVal,
         sl: slVal,
-        tp: tpVal,
+        tp: clampedTP,  // capped at max 3R
         rr,
         reason: signal.reason || null,
         reasoning: signal.reasoning || null,

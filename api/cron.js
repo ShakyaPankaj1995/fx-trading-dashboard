@@ -21,7 +21,6 @@ const ASSETS = [
 ];
 
 const TIMEFRAMES = [
-  { val: '240', yf: '60m', range: '1mo' },
   { val: '60',  yf: '60m', range: '1mo' },
   { val: '15',  yf: '15m', range: '5d'  },
   { val: '5',   yf: '5m',  range: '5d'  }
@@ -245,9 +244,26 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis, htfBias = {}) 
   );
   if (isDuplicate) return logs;
 
-  const rr = direction === 'BUY'
-    ? ((analysis.tp - analysis.entry) / (analysis.entry - analysis.sl)).toFixed(2)
-    : ((analysis.entry - analysis.tp) / (analysis.sl - analysis.entry)).toFixed(2);
+  // ── CHECK 3: R/R Filter — min 1:1.5, max 1:3 ──
+  const risk   = Math.abs(analysis.entry - analysis.sl);
+  if (risk <= 0) return logs; // invalid SL
+
+  // Cap TP at 3R if farther away
+  const maxTP = direction === 'BUY'
+    ? analysis.entry + risk * 3
+    : analysis.entry - risk * 3;
+  const clampedTP = direction === 'BUY'
+    ? Math.min(analysis.tp, maxTP)
+    : Math.max(analysis.tp, maxTP);
+
+  // Check actual R/R after capping
+  const actualRR = Math.abs(clampedTP - analysis.entry) / risk;
+  if (actualRR < 1.5) {
+    console.log(`[Cron] ❌ RR BLOCK: ${symbol} ${timeframe} ${direction} — R/R ${actualRR.toFixed(2)} below min 1.5`);
+    return logs;
+  }
+
+  const rr = actualRR.toFixed(2);
 
   const newLog = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -258,7 +274,7 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis, htfBias = {}) 
     signal: direction,
     entry: analysis.entry,
     sl: analysis.sl,
-    tp: analysis.tp,
+    tp: clampedTP,   // capped at max 3R
     rr,
     status: 'ACTIVE',
     closedAt: null,

@@ -165,11 +165,11 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
     if (isSS && sweepOk && cisdOk) {
       sig = 'SELL'; ent = signalData.cisdHigh;
       sl  = signalData.sweep.sweepHigh + signalData.atr * 0.1;
-      tp  = signalData.nearestBullFVG ? signalData.nearestBullFVG.high : ent - (sl - ent) * 2.5;
+      tp  = signalData.nearestBullFVG ? signalData.nearestBullFVG.high : ent - (sl - ent) * 3;
     } else if (isSB && sweepOk && cisdOk) {
       sig = 'BUY'; ent = signalData.cisdLow;
       sl  = signalData.sweep.sweepLow - signalData.atr * 0.1;
-      tp  = signalData.nearestBearFVG ? signalData.nearestBearFVG.low : ent + (ent - sl) * 2.5;
+      tp  = signalData.nearestBearFVG ? signalData.nearestBearFVG.low : ent + (ent - sl) * 3;
     }
 
     fiveDataRef.current = { signal: sig, scenario: scenarioResult, entry: ent, sl, tp };
@@ -250,12 +250,12 @@ const JustinSignal = ({ symbol, interval, refreshTrigger, onLoadStart, onLoadEnd
      finalSignal = 'BUY';
      entry = signalData?.cisdBullFVG ? signalData.cisdBullFVG.low : cp;
      sl = signalData?.sweep.sweepLow - signalData?.atr * 0.1;
-     tp = entry + (entry - sl) * 2.5;
+     tp = entry + (entry - sl) * 3;
   } else if (isAlignedBearish && tick2Active && tick4Active) {
      finalSignal = 'SELL';
      entry = signalData?.cisdBearFVG ? signalData.cisdBearFVG.high : cp;
      sl = signalData?.sweep.sweepHigh + signalData?.atr * 0.1;
-     tp = entry - (sl - entry) * 2.5;
+     tp = entry - (sl - entry) * 3;
   }
 
   const activeLoggedTrade = logs?.find(l => 
