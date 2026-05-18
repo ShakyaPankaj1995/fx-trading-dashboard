@@ -91,15 +91,13 @@ export function useSignalLog() {
         return prev;
       }
 
-      // 2. Don't log if an ACTIVE trade exists for same symbol+timeframe+strategy+direction
-      const hasActiveMatch = prev.some(log =>
+      // 2. Don't log if an ACTIVE trade exists for same symbol+timeframe
+      const hasActiveMatchOnSameTF = prev.some(log =>
         log.symbol === signal.symbol &&
-        log.timeframe === signal.timeframe &&
-        log.strategy === signal.strategy &&
-        log.signal === signal.signal &&
-        log.status === 'ACTIVE'
+        log.status === 'ACTIVE' &&
+        log.timeframe === signal.timeframe
       );
-      if (hasActiveMatch) return prev;
+      if (hasActiveMatchOnSameTF) return prev;
 
       // 2. Don't log if a trade with very similar entry existed recently (2 hours)
       const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;

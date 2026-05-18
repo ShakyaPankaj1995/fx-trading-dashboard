@@ -92,23 +92,26 @@ export default async function handler(req, res) {
       });
     };
 
-    // 2. Pre-fetch 4H and 1H bias for all assets (HTF Alignment Check)
-    const htfBias = {}; // { 'EURUSD': { h4: 'BUY'|'SELL'|null, h1: 'BUY'|'SELL'|null } }
+    // 2. Pre-fetch 4H, 1H, and 15M bias for all assets (HTF Alignment Check)
+    const htfBias = {}; // { 'EURUSD': { h4: 'BUY'|'SELL'|null, h1: 'BUY'|'SELL'|null, m15: 'BUY'|'SELL'|null } }
     for (const asset of ASSETS) {
       try {
-        const [data4h, data1h] = await Promise.all([
+        const [data4h, data1h, data15m] = await Promise.all([
           fetchYF(asset.ticker, '60m', '1mo'),
           fetchYF(asset.ticker, '60m', '5d'),
+          fetchYF(asset.ticker, '15m', '5d'),
         ]);
-        // 4H bias: aggregate 60m into 4H and get trend direction via analyzeJustinSetup
+        // Aggregate to respective timeframes and get bias direction
         const justin4h = analyzeJustinSetup(data4h, null, '240');
         const justin1h = analyzeJustinSetup(data1h, null, '60');
+        const justin15m = analyzeJustinSetup(data15m, null, '15');
         htfBias[asset.name] = {
           h4: justin4h.signal === 'BUY' || justin4h.signal === 'SELL' ? justin4h.signal : null,
           h1: justin1h.signal === 'BUY' || justin1h.signal === 'SELL' ? justin1h.signal : null,
+          m15: justin15m.signal === 'BUY' || justin15m.signal === 'SELL' ? justin15m.signal : null,
         };
       } catch (e) {
-        htfBias[asset.name] = { h4: null, h1: null };
+        htfBias[asset.name] = { h4: null, h1: null, m15: null };
       }
     }
 
@@ -206,30 +209,33 @@ function addLogIfNew(logs, symbol, timeframe, strategy, analysis, htfBias = {}) 
   const tenMinsAgo = Date.now() - 10 * 60 * 1000;
   const direction = analysis.signal; // 'BUY' or 'SELL'
 
-  // ── CHECK 1: HTF Bias Alignment (4H and 1H must agree) ──
-  // Only enforce on 15M and 5M entries (HTF IS the 4H/1H)
-  if (timeframe === '15' || timeframe === '5') {
-    const { h4, h1 } = htfBias;
-    // If we have a clear 4H bias and it disagrees → skip
-    if (h4 && h4 !== direction) {
-      console.log(`[Cron] ❌ HTF BLOCK: ${symbol} ${timeframe}M ${direction} rejected — 4H says ${h4}`);
-      return logs;
-    }
-    // If we have a clear 1H bias and it disagrees → skip
-    if (h1 && h1 !== direction) {
-      console.log(`[Cron] ❌ HTF BLOCK: ${symbol} ${timeframe}M ${direction} rejected — 1H says ${h1}`);
-      return logs;
-    }
+  // ── CHECK 1: Cascading Timeframe Bias Alignment ──
+  // The constraint: multi-TF setup is allowed ONLY when shorter-TF aligns with HTF bias
+  // 5m aligns with 15m, 15m aligns with 1h, 1h aligns with 4h
+  const { h4, h1, m15 } = htfBias;
+  
+  if (timeframe === '5' && m15 && m15 !== direction) {
+    console.log(`[Cron] ❌ ALIGN BLOCK: ${symbol} 5M ${direction} rejected — 15M bias is ${m15}`);
+    return logs;
+  }
+  if (timeframe === '15' && h1 && h1 !== direction) {
+    console.log(`[Cron] ❌ ALIGN BLOCK: ${symbol} 15M ${direction} rejected — 1H bias is ${h1}`);
+    return logs;
+  }
+  if (timeframe === '60' && h4 && h4 !== direction) {
+    console.log(`[Cron] ❌ ALIGN BLOCK: ${symbol} 1H ${direction} rejected — 4H bias is ${h4}`);
+    return logs;
   }
 
-  // ── CHECK 2: Signal Conflict (no opposing active signals for this pair) ──
-  const hasConflict = logs.some(log =>
+  // ── CHECK 2: One Trade Per Timeframe Slot ──
+  // Multiple trades on same pair allowed if on DIFFERENT timeframes
+  const hasActiveMatchOnSameTF = logs.some(log =>
     log.symbol === symbol &&
     log.status === 'ACTIVE' &&
-    log.signal !== direction   // A different strategy is already active in OPPOSITE direction
+    log.timeframe === timeframe
   );
-  if (hasConflict) {
-    console.log(`[Cron] ⚠️ CONFLICT BLOCK: ${symbol} ${timeframe} ${direction} rejected — opposing active signal exists`);
+  if (hasActiveMatchOnSameTF) {
+    console.log(`[Cron] ⚠️ TF SLOT BLOCK: ${symbol} ${timeframe}M ${direction} rejected — active trade exists on this timeframe slot`);
     return logs;
   }
 
