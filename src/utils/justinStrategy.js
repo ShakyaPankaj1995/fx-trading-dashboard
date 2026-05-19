@@ -101,8 +101,8 @@ function detectCISD(highs, lows, closes, opens, lookback = 10) {
     if (isBearish) bearishCount++;
   }
 
-  const bullishCISD = bullishCount >= 1 && closes[len - 2] > recentStructureHigh;
-  const bearishCISD = bearishCount >= 1 && closes[len - 2] < recentStructureLow;
+  const bullishCISD = bullishCount >= 2 && closes[len - 2] > recentStructureHigh;
+  const bearishCISD = bearishCount >= 2 && closes[len - 2] < recentStructureLow;
 
   // SL levels per your spec:
   // SELL SL = CISD candle high
@@ -276,7 +276,7 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
 
   if (pH.length < 20) return { signal: 'WAIT', reason: 'Insufficient data' };
 
-  const currentPrice = pC[pC.length - 1];
+  const currentPrice = pC[pC.length - 2];
   const { bullishFVGs, bearishFVGs } = detectFVGs(pH, pL, pC, pTimestamps);
 
   const unmitigatedBull = bullishFVGs.filter(f => !f.mitigated);

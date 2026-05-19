@@ -98,10 +98,10 @@ export function analyzeData(data, intervalStr) {
   const uptrend = lastPh.value > prevPh.value && lastPl.value > prevPl.value;
   const downtrend = lastPh.value < prevPh.value && lastPl.value < prevPl.value;
 
-  const currentClose = pricesClose[pricesClose.length - 1];
-  const currentOpen = pricesOpen[pricesOpen.length - 1];
-  const currentHigh = pricesHigh[pricesHigh.length - 1];
-  const currentLow = pricesLow[pricesLow.length - 1];
+  const currentClose = pricesClose[pricesClose.length - 2];
+  const currentOpen = pricesOpen[pricesOpen.length - 2];
+  const currentHigh = pricesHigh[pricesHigh.length - 2];
+  const currentLow = pricesLow[pricesLow.length - 2];
 
   let trSum = 0;
   let count = 0;
@@ -335,7 +335,7 @@ export function analyzeCRTData(data, intervalStr) {
          if (pricesLow[j] < c2Low) valid = false;
       }
       if (valid) {
-        const entry = pricesClose[pricesClose.length - 1];
+        const entry = c3Close;
         const sl = c2Low - (c1High - c1Low) * 0.1;
         const rawTp = c1High;
         const tp = Math.min(rawTp, entry + (entry - sl) * 3.0); // cap at 3x risk
@@ -372,7 +372,7 @@ export function analyzeCRTData(data, intervalStr) {
          if (pricesHigh[j] > c2High) valid = false;
       }
       if (valid) {
-        const entry = pricesClose[pricesClose.length - 1];
+        const entry = c3Close;
         const sl = c2High + (c1High - c1Low) * 0.1;
         const rawTp = c1Low;
         const tp = Math.max(rawTp, entry - (sl - entry) * 3.0); // cap at 3x risk

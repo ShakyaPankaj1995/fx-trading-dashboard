@@ -124,8 +124,8 @@ function detectCISD(highs, lows, closes, opens, lookback = 10) {
     if (isBearish) bearishCount++;
   }
 
-  const bullishCISD = bullishCount >= 2 && closes[len - 1] > recentStructureHigh;
-  const bearishCISD = bearishCount >= 2 && closes[len - 1] < recentStructureLow;
+  const bullishCISD = bullishCount >= 2 && closes[len - 2] > recentStructureHigh;
+  const bearishCISD = bearishCount >= 2 && closes[len - 2] < recentStructureLow;
 
   // Find the FVG left by the CISD move
   const cisdBullFVG = bullishCISD ? {
@@ -212,9 +212,9 @@ export function analyzeJustinSetup(primaryData, correlatedData, intervalStr) {
 
   if (pH.length < 20) return { signal: 'WAIT', reason: 'Insufficient data' };
 
-  const currentClose = pC[pC.length - 1];
-  const currentHigh  = pH[pH.length - 1];
-  const currentLow   = pL[pL.length - 1];
+  const currentClose = pC[pC.length - 2];
+  const currentHigh  = pH[pH.length - 2];
+  const currentLow   = pL[pL.length - 2];
 
   // --- Step 1: Detect HTF FVGs ---
   const { bullishFVGs, bearishFVGs } = detectFVGs(pH, pL, pC);
